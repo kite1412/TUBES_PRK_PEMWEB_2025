@@ -1,0 +1,82 @@
+body {
+    font-family: Arial, sans-serif;
+    background: #f5f6fa;
+    margin: 0;
+}
+
+.navbar {
+    background: #2e86de;
+    padding: 15px 25px;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.nav-right button {
+    background: #54a0ff;
+    border: none;
+    padding: 10px 18px;
+    color: white;
+    margin-left: 10px;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.box {
+    background: white;
+    width: 350px;
+    padding: 20px;
+    margin: 25px auto;
+    border-radius: 10px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+}
+
+.box input {
+    width: 100%;
+    padding: 10px;
+    margin: 6px 0;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
+
+.box button {
+    width: 100%;
+    padding: 10px;
+    background: #2e86de;
+    border: none;
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.hidden { display: none; }
+
+#dashboard {
+    width: 90%;
+    max-width: 900px;
+    margin: auto;
+}
+
+#empTable {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    margin-top: 20px;
+}
+
+#empTable th, #empTable td {
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+}
+
+.action-btn {
+    padding: 5px 10px;
+    margin-right: 5px;
+    border-radius: 5px;
+    cursor: pointer;
+    border: none;
+}
+
+.edit-btn { background: #f1c40f; color: white; }
+.delete-btn { background: #e74c3c; color: white; }
