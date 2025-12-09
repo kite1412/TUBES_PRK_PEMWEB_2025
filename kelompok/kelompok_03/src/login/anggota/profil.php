@@ -6,8 +6,22 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'anggota') {
     exit;
 }
 
-include '../includes/db.php';
+// Use central DB helper
+$dbPath = __DIR__ . '/../../config/db.php';
+if (!file_exists($dbPath)) {
+    die('Database configuration not found.');
+}
+require_once $dbPath;
+$dbh = get_db();
 $user_id = $_SESSION['user_id'];
+
+// Handle logout action
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'logout') {
+    session_unset();
+    session_destroy();
+    header('Location: ../login.php');
+    exit;
+}
 
 // === HANDLE EDIT PROFIL + UPLOAD FOTO ===
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'edit_profil') {
@@ -41,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     $foto = $foto_name;
 
                     // Hapus foto lama
-                    $old_data = $pdo->prepare("SELECT foto FROM anggota WHERE id = ?");
+                    $old_data = $dbh->prepare("SELECT foto FROM anggota WHERE id = ?");
                     $old_data->execute([$user_id]);
                     $old_foto = $old_data->fetchColumn();
                     if ($old_foto && file_exists('../uploads/' . $old_foto)) {
@@ -56,10 +70,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         // Simpan ke database jika tidak ada error
         if (!$error) {
             if ($foto) {
-                $pdo->prepare("UPDATE anggota SET nama = ?, npm = ?, foto = ? WHERE id = ?")
+                $dbh->prepare("UPDATE anggota SET nama = ?, npm = ?, foto = ? WHERE id = ?")
                     ->execute([$nama, $npm, $foto, $user_id]);
             } else {
-                $pdo->prepare("UPDATE anggota SET nama = ?, npm = ? WHERE id = ?")
+                $dbh->prepare("UPDATE anggota SET nama = ?, npm = ? WHERE id = ?")
                     ->execute([$nama, $npm, $user_id]);
             }
             header("Location: profil.php?updated=1");
@@ -69,40 +83,136 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // === AMBIL DATA ANGGOTA ===
-$stmt = $pdo->prepare("SELECT * FROM anggota WHERE id = ?");
+$stmt = $dbh->prepare("SELECT * FROM anggota WHERE id = ?");
 $stmt->execute([$user_id]);
-$user = $stmt->fetch();
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$user) {
     die("Anggota tidak ditemukan.");
 }
 
 // === AMBIL JABATAN & UNIT ===
-$jabatan_stmt = $pdo->prepare("
-    SELECT j.nama AS jabatan, d.nama AS departemen, div.nama AS divisi
+ $jabatan_stmt = $dbh->prepare(
+     "SELECT j.nama AS jabatan, d.nama AS departemen, di.nama AS divisi, aj.jabatan_id, aj.departemen_id, aj.divisi_id
     FROM anggota_jabatan aj
-    JOIN jabatan j ON aj.jabatan_id = j.id
+    LEFT JOIN jabatan j ON aj.jabatan_id = j.id
     LEFT JOIN departemen d ON aj.departemen_id = d.id
-    LEFT JOIN divisi div ON aj.divisi_id = div.id
+    LEFT JOIN divisi di ON aj.divisi_id = di.id
     WHERE aj.anggota_id = ?
 ");
 $jabatan_stmt->execute([$user_id]);
-$jabatan_list = $jabatan_stmt->fetchAll();
+$jabatan_list = $jabatan_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Some rows may have NULL for jabatan name (j.nama). If so, fetch missing names by jabatan_id.
+$missingJabatanIds = [];
+foreach ($jabatan_list as $r) {
+    $jid = $r['jabatan_id'] ?? null;
+    $jname = trim((string)($r['jabatan'] ?? ''));
+    if ($jid && $jname === '') {
+        $missingJabatanIds[$jid] = $jid;
+    }
+}
+if (!empty($missingJabatanIds)) {
+    $placeholders = implode(',', array_fill(0, count($missingJabatanIds), '?'));
+    $sql = "SELECT id, nama FROM jabatan WHERE id IN ($placeholders)";
+    $stmt2 = $dbh->prepare($sql);
+    $stmt2->execute(array_values($missingJabatanIds));
+    $rows = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+    $jabMap = [];
+    foreach ($rows as $rr) {
+        $jabMap[$rr['id']] = $rr['nama'];
+    }
+    // populate back into $jabatan_list
+    foreach ($jabatan_list as &$r) {
+        $jid = $r['jabatan_id'] ?? null;
+        if ($jid && empty(trim((string)($r['jabatan'] ?? ''))) && isset($jabMap[$jid])) {
+            $r['jabatan'] = $jabMap[$jid];
+        }
+    }
+    unset($r);
+}
+
+// Build typed display entries for all jabatan rows according to the anggota_jabatan structure
+$jabatan_displays = [];
+if (!empty($jabatan_list) && is_array($jabatan_list)) {
+    foreach ($jabatan_list as $row) {
+        $jabName = trim((string)($row['jabatan'] ?? ''));
+        $depName = trim((string)($row['departemen'] ?? ''));
+        $divName = trim((string)($row['divisi'] ?? ''));
+
+        // Determine role type: organisasi | departemen | divisi
+        if ($divName !== '') {
+            $type = 'divisi';
+        } elseif ($depName !== '') {
+            $type = 'departemen';
+        } else {
+            $type = 'organisasi';
+        }
+
+        // Build human-friendly label. If jabatan name is missing, synthesize a generic label using unit info.
+        if ($jabName !== '') {
+            if ($type === 'divisi') {
+                $label = $jabName . ' ' . $divName;
+            } elseif ($type === 'departemen') {
+                $label = $jabName . ' ' . $depName;
+            } else {
+                $label = $jabName;
+            }
+        } else {
+            // jabatan name empty: synthesize
+            if ($type === 'divisi') {
+                $label = 'Anggota Divisi ' . $divName;
+            } elseif ($type === 'departemen') {
+                $label = 'Anggota Departemen ' . $depName;
+            } else {
+                $label = 'Anggota Organisasi';
+            }
+        }
+
+        $jabatan_displays[] = ['label' => $label, 'type' => $type];
+    }
+}
+
+// Choose primary display by priority: Organisasi -> Departemen -> Divisi
+$primary_display = null;
+$primary_type = null;
+if (!empty($jabatan_displays)) {
+    // search for organisasi
+    foreach ($jabatan_displays as $entry) {
+        if ($entry['type'] === 'organisasi') { $primary_display = $entry['label']; $primary_type = 'organisasi'; break; }
+    }
+    // if not found, search departemen
+    if ($primary_display === null) {
+        foreach ($jabatan_displays as $entry) {
+            if ($entry['type'] === 'departemen') { $primary_display = $entry['label']; $primary_type = 'departemen'; break; }
+        }
+    }
+    // if still not found, pick first divisi
+    if ($primary_display === null) {
+        foreach ($jabatan_displays as $entry) {
+            if ($entry['type'] === 'divisi') { $primary_display = $entry['label']; $primary_type = 'divisi'; break; }
+        }
+    }
+}
 
 // === AMBIL PENGUMUMAN INTERNAL ===
-$pengumuman_stmt = $pdo->prepare("
-    SELECT judul, konten, tanggal FROM pengumuman
-    WHERE target = 'semua'
-       OR (target = 'departemen' AND departemen_id IN (
-            SELECT departemen_id FROM anggota_jabatan WHERE anggota_id = ?
-          ))
-       OR (target = 'divisi' AND divisi_id IN (
-            SELECT divisi_id FROM anggota_jabatan WHERE anggota_id = ?
-          ))
-    ORDER BY tanggal DESC
+ $pengumuman_stmt = $dbh->prepare(
+         "SELECT p.judul, p.konten, p.tanggal, p.target, p.departemen_id, p.divisi_id,
+                         d.nama AS departemen_nama, di.nama AS divisi_nama
+        FROM pengumuman p
+        LEFT JOIN departemen d ON p.departemen_id = d.id
+        LEFT JOIN divisi di ON p.divisi_id = di.id
+        WHERE p.target = 'semua'
+             OR (p.target = 'departemen' AND p.departemen_id IN (
+                        SELECT departemen_id FROM anggota_jabatan WHERE anggota_id = ?
+                    ))
+             OR (p.target = 'divisi' AND p.divisi_id IN (
+                        SELECT divisi_id FROM anggota_jabatan WHERE anggota_id = ?
+                    ))
+        ORDER BY p.tanggal DESC
 ");
 $pengumuman_stmt->execute([$user_id, $user_id]);
-$pengumuman_list = $pengumuman_stmt->fetchAll();
+$pengumuman_list = $pengumuman_stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -110,118 +220,43 @@ $pengumuman_list = $pengumuman_stmt->fetchAll();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Profil Anggota - Abelian</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f8fafc;
-            color: #334155;
-            line-height: 1.6;
-            padding: 20px;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-            overflow: hidden;
-        }
-        header {
-            background: #4F46E5;
-            color: white;
-            padding: 24px;
-            text-align: center;
-        }
-        header h1 { font-size: 1.8rem; }
-        .content { padding: 24px; }
-        .profil-section {
-            text-align: center;
-            margin-bottom: 32px;
-        }
-        .profil-foto {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 4px solid #e2e8f0;
-            background: #f1f5f9;
-            margin-bottom: 16px;
-        }
-        .btn {
-            display: inline-block;
-            padding: 8px 16px;
-            background: #4F46E5;
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            border: none;
-            font-size: 14px;
-        }
-        .btn:hover { background: #4338CA; }
-        .btn-secondary {
-            background: #94a3b8;
-        }
-        .btn-secondary:hover {
-            background: #64748b;
-        }
-        .section {
-            margin-bottom: 28px;
-        }
-        .section h2 {
-            font-size: 1.3rem;
-            margin-bottom: 16px;
-            color: #1e293b;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #e2e8f0;
-        }
-        .pengumuman-item {
-            background: #f8fafc;
-            padding: 14px;
-            border-left: 4px solid #4F46E5;
-            margin-bottom: 12px;
-            border-radius: 0 6px 6px 0;
-        }
-        .pengumuman-item h4 { margin-bottom: 6px; color: #0f172a; }
-        .pengumuman-item p { color: #475569; font-size: 0.95rem; }
-        .pengumuman-item small { color: #94a3b8; font-size: 0.85rem; }
-        .form-group {
-            margin: 16px 0;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 600;
-            color: #1e293b;
-        }
-        .form-group input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            font-size: 15px;
-        }
-        .form-group input:focus {
-            outline: none;
-            border-color: #4F46E5;
-        }
-        .alert {
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 16px;
-        }
-        .alert-success { background: #dcfce7; color: #166534; }
-        .alert-error { background: #fee2e2; color: #991b1b; }
-        #editForm {
-            display: none;
-            background: #f8fafc;
-            padding: 20px;
-            border-radius: 10px;
-            margin-top: 20px;
-            border: 1px solid #e2e8f0;
-        }
+        :root{ --primary: #0466c8; --muted:#94a3b8; --bg:#f4f7fe; --text:#1f2937 }
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background:var(--bg); color:var(--text); line-height:1.6; padding:28px}
+        .container{max-width:980px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 8px 30px rgba(13,38,76,0.08);overflow:hidden}
+        header{background:var(--primary);color:#fff;padding:28px;text-align:left}
+        header h1{font-size:1.6rem;margin:0}
+        .content{padding:26px}
+        .profil-section{text-align:center;margin-bottom:28px;padding-bottom:8px;border-bottom:1px solid #eef2ff}
+        .profil-foto{width:120px;height:120px;border-radius:9999px;object-fit:cover;border:4px solid #eef2ff;background:#f8fafc;margin-bottom:14px}
+        .btn{display:inline-block;padding:10px 18px;background:var(--primary);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;cursor:pointer;border:none;font-size:14px}
+        .btn:hover{opacity:.95}
+        .btn-secondary{background:var(--muted);color:#fff;border-radius:10px;padding:8px 14px}
+        .section{margin-bottom:22px}
+        .section h2{font-size:1.1rem;margin-bottom:12px;color:var(--text);padding-bottom:8px;border-bottom:1px solid #f1f5f9}
+        .pengumuman-item{background:#fbfdff;padding:14px;border-left:4px solid var(--primary);margin-bottom:12px;border-radius:6px}
+        .pengumuman-item h4{margin:0 0 6px 0;color:#0b1220}
+        .pengumuman-item p{color:#475569;font-size:.95rem;margin:0}
+        .pengumuman-item small{color:#64748b;font-size:.85rem}
+        .role-badge{display:inline-block;padding:6px 10px;border-radius:999px;font-weight:700;font-size:13px;color:#fff}
+        .role-org{background:linear-gradient(90deg,#0ea5a4,#0369a1)}
+        .role-dept{background:linear-gradient(90deg,#fb923c,#f97316)}
+        .role-div{background:linear-gradient(90deg,#7c3aed,#6d28d9)}
+        .target-badge{display:inline-block;padding:6px 8px;border-radius:999px;font-weight:700;font-size:11px;color:#fff}
+        .target-all{background:#64748b}
+        .target-dept{background:#f59e0b}
+        .target-div{background:#7c3aed}
+        .form-group{margin:14px 0}
+        .form-group label{display:block;margin-bottom:6px;font-weight:600;color:var(--text)}
+        .form-group input{width:100%;padding:10px;border:1px solid #e6eef8;border-radius:8px;font-size:15px}
+        .form-group input:focus{outline:none;box-shadow:0 0 0 4px rgba(4,102,200,0.08);border-color:var(--primary)}
+        .alert{padding:10px;border-radius:8px;margin-bottom:16px}
+        .alert-success{background:#e6ffef;color:#065f46}
+        .alert-error{background:#ffe8e8;color:#7f1d1d}
+        #editForm{display:none;background:#ffffff;padding:20px;border-radius:10px;margin-top:18px;border:1px solid #eef2ff}
+        @media (max-width:640px){body{padding:18px}.container{border-radius:10px}header{padding:18px}.content{padding:18px}}
     </style>
 </head>
 <body>
@@ -236,18 +271,21 @@ $pengumuman_list = $pengumuman_stmt->fetchAll();
             <?php endif; ?>
 
             <div class="profil-section">
-                <img 
-                    src="<?= !empty($user['foto']) 
-                        ? '../uploads/' . htmlspecialchars($user['foto']) 
-                        : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iI2Y4ZmFmYyIvPjx0ZXh0IHg9IjYwIiB5PSI3NSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOTQ5NGE4Ij5OT1RPIFBBU1Q8L3RleHQ+PC9zdmc+' ?>" 
-                    alt="Foto Profil" 
-                    class="profil-foto"
-                >
                 <h2><?= htmlspecialchars($user['nama']) ?></h2>
-                <p><?= htmlspecialchars($user['npm']) ?></p>
-                <button class="btn" onclick="document.getElementById('editForm').style.display='block'">
-                    Edit Profil
-                </button>
+                <?php if (!empty($primary_display)): ?>
+                    <p style="margin:6px 0 0 0;font-weight:600;color:#0b1220">
+                        <span class="role-badge <?php echo ($primary_type==='organisasi'?'role-org':($primary_type==='departemen'?'role-dept':'role-div')); ?>">
+                            <?= htmlspecialchars($primary_display) ?>
+                        </span>
+                    </p>
+                <?php endif; ?>
+                <p style="margin-top:6px;color:#64748b"><?= htmlspecialchars($user['npm']) ?></p>
+                <div style="margin-top:12px">
+                    <form method="POST" style="display:inline-block;margin-left:10px">
+                        <input type="hidden" name="action" value="logout">
+                        <button type="submit" class="btn btn-secondary">Keluar</button>
+                    </form>
+                </div>
             </div>
 
             <!-- Form Edit Profil (sembunyi) -->
@@ -281,17 +319,23 @@ $pengumuman_list = $pengumuman_stmt->fetchAll();
             <!-- Jabatan -->
             <div class="section">
                 <h2>Jabatan</h2>
-                <?php if ($jabatan_list): ?>
-                    <?php foreach ($jabatan_list as $j): ?>
-                        <p>
-                            <strong><?= htmlspecialchars($j['jabatan']) ?></strong>
-                            <?php if ($j['departemen']): ?> — Departemen <?= htmlspecialchars($j['departemen']) ?><?php endif; ?>
-                            <?php if ($j['divisi']): ?> — Divisi <?= htmlspecialchars($j['divisi']) ?><?php endif; ?>
-                        </p>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <p>Belum memiliki jabatan.</p>
-                <?php endif; ?>
+                <?php
+                    if (!empty($jabatan_displays) && is_array($jabatan_displays)) {
+                        foreach ($jabatan_displays as $entry) {
+                            $label = $entry['label'];
+                            $type = $entry['type'];
+                            // choose class
+                            $cls = ($type === 'organisasi') ? 'role-org' : (($type === 'departemen') ? 'role-dept' : 'role-div');
+                            ?>
+                            <p style="margin-bottom:8px">
+                                <span class="role-badge <?= $cls ?>"><?= htmlspecialchars($label) ?></span>
+                            </p>
+                            <?php
+                        }
+                    } else {
+                        echo '<p>Belum memiliki jabatan.</p>';
+                    }
+                ?>
             </div>
 
             <!-- Pengumuman Internal -->
@@ -299,8 +343,23 @@ $pengumuman_list = $pengumuman_stmt->fetchAll();
                 <h2>Pengumuman Internal</h2>
                 <?php if ($pengumuman_list): ?>
                     <?php foreach ($pengumuman_list as $p): ?>
+                        <?php
+                            $t = $p['target'] ?? 'semua';
+                            $targetLabel = 'Semua';
+                            $targetClass = 'target-all';
+                            if ($t === 'departemen') {
+                                $targetLabel = 'Departemen' . (!empty($p['departemen_nama']) ? ': ' . $p['departemen_nama'] : '');
+                                $targetClass = 'target-dept';
+                            } elseif ($t === 'divisi') {
+                                $targetLabel = 'Divisi' . (!empty($p['divisi_nama']) ? ': ' . $p['divisi_nama'] : '');
+                                $targetClass = 'target-div';
+                            }
+                        ?>
                         <div class="pengumuman-item">
-                            <h4><?= htmlspecialchars($p['judul']) ?></h4>
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                                <h4 style="margin:0"><?= htmlspecialchars($p['judul']) ?></h4>
+                                <span class="target-badge <?= $targetClass ?>" title="Target: <?= htmlspecialchars($t) ?>"><?= htmlspecialchars($targetLabel) ?></span>
+                            </div>
                             <p><?= htmlspecialchars($p['konten']) ?></p>
                             <small><?= date('d M Y H:i', strtotime($p['tanggal'])) ?></small>
                         </div>
