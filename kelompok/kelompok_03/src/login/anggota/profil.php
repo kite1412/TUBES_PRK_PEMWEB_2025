@@ -14,6 +14,8 @@ if (!file_exists($dbPath)) {
 require_once $dbPath;
 $dbh = get_db();
 $user_id = $_SESSION['user_id'];
+// Date helper (format dates in Bahasa Indonesia)
+require_once __DIR__ . '/../../helpers/date_helper.php';
 
 // Handle logout action
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'logout') {
@@ -225,25 +227,32 @@ $pengumuman_list = $pengumuman_stmt->fetchAll(PDO::FETCH_ASSOC);
         :root{ --primary: #0466c8; --muted:#94a3b8; --bg:#f4f7fe; --text:#1f2937 }
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background:var(--bg); color:var(--text); line-height:1.6; padding:28px}
-        .container{max-width:980px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 8px 30px rgba(13,38,76,0.08);overflow:hidden}
-        header{background:var(--primary);color:#fff;padding:28px;text-align:left}
-        header h1{font-size:1.6rem;margin:0}
-        .content{padding:26px}
-        .profil-section{text-align:center;margin-bottom:28px;padding-bottom:8px;border-bottom:1px solid #eef2ff}
-        .profil-foto{width:120px;height:120px;border-radius:9999px;object-fit:cover;border:4px solid #eef2ff;background:#f8fafc;margin-bottom:14px}
+        .container{max-width:1100px;margin:0 auto;background:#fff;border-radius:14px;box-shadow:0 12px 40px rgba(13,38,76,0.08);overflow:hidden}
+        header{background:var(--primary);color:#fff;padding:22px 28px;text-align:left}
+        header h1{font-size:1.4rem;margin:0}
+        .content{padding:28px}
+        .profil-section{display:flex;align-items:center;gap:20px;margin-bottom:28px;padding:20px;border-bottom:1px solid #eef2ff;background:linear-gradient(180deg, rgba(4,102,200,0.04), transparent)}
+        .profil-foto{width:140px;height:140px;border-radius:18px;object-fit:cover;border:6px solid #fff;background:linear-gradient(180deg,#f8fafc,#eef2ff);box-shadow:0 8px 30px rgba(4,102,200,0.08)}
+        .meta{flex:1}
+        .meta h2{font-size:1.45rem;margin:0 0 6px 0}
+        .meta p.meta-sub{margin:0;color:var(--muted);font-weight:600}
+        .meta .actions{margin-top:12px;display:flex;gap:10px}
+        .btn{display:inline-block;padding:10px 18px;background:var(--primary);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;cursor:pointer;border:none;font-size:14px;box-shadow:0 6px 18px rgba(4,102,200,0.14)}
+        .btn:hover{transform:translateY(-1px)}
+        .btn-secondary{background:#fff;color:var(--primary);border:1px solid rgba(4,102,200,0.12);box-shadow:none;padding:9px 16px}
         .btn{display:inline-block;padding:10px 18px;background:var(--primary);color:#fff;text-decoration:none;border-radius:10px;font-weight:600;cursor:pointer;border:none;font-size:14px}
         .btn:hover{opacity:.95}
         .btn-secondary{background:var(--muted);color:#fff;border-radius:10px;padding:8px 14px}
         .section{margin-bottom:22px}
         .section h2{font-size:1.1rem;margin-bottom:12px;color:var(--text);padding-bottom:8px;border-bottom:1px solid #f1f5f9}
-        .pengumuman-item{background:#fbfdff;padding:14px;border-left:4px solid var(--primary);margin-bottom:12px;border-radius:6px}
-        .pengumuman-item h4{margin:0 0 6px 0;color:#0b1220}
-        .pengumuman-item p{color:#475569;font-size:.95rem;margin:0}
+        .pengumuman-item{background:#fff;padding:14px;border-radius:12px;margin-bottom:12px;box-shadow:0 6px 20px rgba(11,17,32,0.04);border-left:4px solid rgba(4,102,200,0.12)}
+        .pengumuman-item h4{margin:0 0 6px 0;color:#0b1220;font-size:1.02rem}
+        .pengumuman-item p{color:#475569;font-size:.97rem;margin:0 0 8px 0}
         .pengumuman-item small{color:#64748b;font-size:.85rem}
-        .role-badge{display:inline-block;padding:6px 10px;border-radius:999px;font-weight:700;font-size:13px;color:#fff}
-        .role-org{background:linear-gradient(90deg,#0ea5a4,#0369a1)}
+        .role-badge{display:inline-block;padding:8px 12px;border-radius:999px;font-weight:700;font-size:13px;color:#fff;box-shadow:0 6px 18px rgba(15,23,42,0.06)}
+        .role-org{background:linear-gradient(90deg,#06b6d4,#0369a1)}
         .role-dept{background:linear-gradient(90deg,#fb923c,#f97316)}
-        .role-div{background:linear-gradient(90deg,#7c3aed,#6d28d9)}
+        .role-div{background:linear-gradient(90deg,#8b5cf6,#6d28d9)}
         .target-badge{display:inline-block;padding:6px 8px;border-radius:999px;font-weight:700;font-size:11px;color:#fff}
         .target-all{background:#64748b}
         .target-dept{background:#f59e0b}
@@ -255,7 +264,9 @@ $pengumuman_list = $pengumuman_stmt->fetchAll(PDO::FETCH_ASSOC);
         .alert{padding:10px;border-radius:8px;margin-bottom:16px}
         .alert-success{background:#e6ffef;color:#065f46}
         .alert-error{background:#ffe8e8;color:#7f1d1d}
-        #editForm{display:none;background:#ffffff;padding:20px;border-radius:10px;margin-top:18px;border:1px solid #eef2ff}
+        #editForm{display:none;background:#ffffff;padding:20px;border-radius:12px;margin-top:18px;border:1px solid #eef2ff}
+        .jabatan-list{display:flex;flex-wrap:wrap;gap:8px}
+        .jabatan-list .role-badge{font-size:12px;padding:6px 10px}
         @media (max-width:640px){body{padding:18px}.container{border-radius:10px}header{padding:18px}.content{padding:18px}}
     </style>
 </head>
@@ -271,20 +282,32 @@ $pengumuman_list = $pengumuman_stmt->fetchAll(PDO::FETCH_ASSOC);
             <?php endif; ?>
 
             <div class="profil-section">
-                <h2><?= htmlspecialchars($user['nama']) ?></h2>
-                <?php if (!empty($primary_display)): ?>
-                    <p style="margin:6px 0 0 0;font-weight:600;color:#0b1220">
-                        <span class="role-badge <?php echo ($primary_type==='organisasi'?'role-org':($primary_type==='departemen'?'role-dept':'role-div')); ?>">
-                            <?= htmlspecialchars($primary_display) ?>
-                        </span>
-                    </p>
-                <?php endif; ?>
-                <p style="margin-top:6px;color:#64748b"><?= htmlspecialchars($user['npm']) ?></p>
-                <div style="margin-top:12px">
-                    <form method="POST" style="display:inline-block;margin-left:10px">
-                        <input type="hidden" name="action" value="logout">
-                        <button type="submit" class="btn btn-secondary">Keluar</button>
-                    </form>
+                <?php
+                    // resolve avatar path if available
+                    $avatar = '';
+                    if (!empty($user['foto'])) {
+                        $avatar = '../uploads/' . $user['foto'];
+                    } else {
+                        $avatar = 'https://ui-avatars.com/api/?name=' . urlencode($user['nama']) . '&background=0466c8&color=fff';
+                    }
+                ?>
+                <img src="<?= htmlspecialchars($avatar) ?>" alt="Foto" class="profil-foto">
+                <div class="meta">
+                    <h2><?= htmlspecialchars($user['nama']) ?></h2>
+                    <?php if (!empty($primary_display)): ?>
+                        <p class="meta-sub">
+                            <span class="role-badge <?php echo ($primary_type==='organisasi'?'role-org':($primary_type==='departemen'?'role-dept':'role-div')); ?>">
+                                <?= htmlspecialchars($primary_display) ?>
+                            </span>
+                        </p>
+                    <?php endif; ?>
+                    <p class="meta-sub" style="margin-top:6px"><?= htmlspecialchars($user['npm']) ?></p>
+                    <div class="actions">
+                        <form method="POST" style="display:inline">
+                            <input type="hidden" name="action" value="logout">
+                            <button type="submit" class="btn btn-secondary">Keluar</button>
+                        </form>
+                    </div>
                 </div>
             </div>
 
@@ -345,7 +368,7 @@ $pengumuman_list = $pengumuman_stmt->fetchAll(PDO::FETCH_ASSOC);
                     <?php foreach ($pengumuman_list as $p): ?>
                         <?php
                             $t = $p['target'] ?? 'semua';
-                            $targetLabel = 'Semua';
+                            $targetLabel = 'Semua Anggota';
                             $targetClass = 'target-all';
                             if ($t === 'departemen') {
                                 $targetLabel = 'Departemen' . (!empty($p['departemen_nama']) ? ': ' . $p['departemen_nama'] : '');
@@ -361,7 +384,7 @@ $pengumuman_list = $pengumuman_stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <span class="target-badge <?= $targetClass ?>" title="Target: <?= htmlspecialchars($t) ?>"><?= htmlspecialchars($targetLabel) ?></span>
                             </div>
                             <p><?= htmlspecialchars($p['konten']) ?></p>
-                            <small><?= date('d M Y H:i', strtotime($p['tanggal'])) ?></small>
+                            <small>Dikirim pada <?= htmlspecialchars(format_date_id($p['tanggal'], true)) ?></small>
                         </div>
                     <?php endforeach; ?>
                 <?php else: ?>

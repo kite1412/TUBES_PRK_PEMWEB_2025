@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+// Date helper (Bahasa Indonesia)
+require_once __DIR__ . '/../helpers/date_helper.php';
 
 function e($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
@@ -307,7 +309,7 @@ try {
                             $judul = $row['judul'] ?? '';
                             $isi = $row['isi'] ?? '';
                             $thumb = $row['thumbnail'] ?? '';
-                            $created = isset($row['created_at']) && $row['created_at'] ? date('d M Y', strtotime($row['created_at'])) : '';
+                            $created = isset($row['created_at']) && $row['created_at'] ? format_date_id($row['created_at'], false) : '';
                             $snippet = mb_substr(strip_tags($isi), 0, 160) . (mb_strlen(strip_tags($isi)) > 160 ? '...' : '');
                             // convert stored thumbnail path (e.g. 'src/files/..') to a URL relative to this file (src/admin)
                             $thumb_url = '';
