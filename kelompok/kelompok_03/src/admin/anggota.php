@@ -1,4 +1,9 @@
 <?php
+session_start();
+if (!isset($_SESSION['user_id']) || (isset($_SESSION['role']) && $_SESSION['role'] !== 'admin') || !isset($_SESSION['role'])) {
+    header('Location: ../login/login.php');
+    exit;
+}
 require_once __DIR__ . '/../config/db.php';
 
 function e($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
@@ -217,6 +222,9 @@ try {
                 <p class="text-xs text-muted truncate">Super User</p>
             </div>
         </div>
+        <form method="POST" action="../login/logout.php" style="padding:12px">
+            <button type="submit" class="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl font-semibold">Keluar</button>
+        </form>
     </aside>
 
     <main class="flex-1 flex flex-col relative overflow-hidden">

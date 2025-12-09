@@ -1,5 +1,12 @@
 <?php
+session_start();
+if (!isset($_SESSION['user_id']) || (isset($_SESSION['role']) && $_SESSION['role'] !== 'admin') || !isset($_SESSION['role'])) {
+    header('Location: ../login/login.php');
+    exit;
+}
 require_once __DIR__ . '/../config/db.php';
+// Date helper (Bahasa Indonesia)
+require_once __DIR__ . '/../helpers/date_helper.php';
 
 function e($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
@@ -242,6 +249,9 @@ try {
                 <p class="text-xs text-muted truncate">Super User</p>
             </div>
         </div>
+        <form method="POST" action="../login/logout.php" style="padding:12px">
+            <button type="submit" class="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl font-semibold">Keluar</button>
+        </form>
     </aside>
 
     <main class="flex-1 flex flex-col relative overflow-hidden">
@@ -307,7 +317,7 @@ try {
                             $judul = $row['judul'] ?? '';
                             $isi = $row['isi'] ?? '';
                             $thumb = $row['thumbnail'] ?? '';
-                            $created = isset($row['created_at']) && $row['created_at'] ? date('d M Y', strtotime($row['created_at'])) : '';
+                            $created = isset($row['created_at']) && $row['created_at'] ? format_date_id($row['created_at'], false) : '';
                             $snippet = mb_substr(strip_tags($isi), 0, 160) . (mb_strlen(strip_tags($isi)) > 160 ? '...' : '');
                             // convert stored thumbnail path (e.g. 'src/files/..') to a URL relative to this file (src/admin)
                             $thumb_url = '';

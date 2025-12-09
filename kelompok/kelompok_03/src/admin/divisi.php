@@ -1,4 +1,9 @@
 <?php
+session_start();
+if (!isset($_SESSION['user_id']) || (isset($_SESSION['role']) && $_SESSION['role'] !== 'admin') || !isset($_SESSION['role'])) {
+    header('Location: ../login/login.php');
+    exit;
+}
 require_once __DIR__ . '/../config/db.php';
 
 // Friendly popup message for UI (used when DB operations fail due to FK constraints)
@@ -34,12 +39,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $jid = (int)$jab['id'];
                             // remove existing Ketua for this divisi (if any)
                             db_execute('DELETE FROM anggota_jabatan WHERE divisi_id = :div AND jabatan_id = :jid', ['div' => $lastId, 'jid' => $jid]);
-                            // insert assignment
-                            db_execute('INSERT INTO anggota_jabatan (anggota_id, jabatan_id, departemen_id, divisi_id) VALUES (:anggota_id, :jabatan_id, :departemen_id, :divisi_id)', [
+                            // insert assignment; departemen_id intentionally left NULL (DB will store NULL)
+                            db_execute('INSERT INTO anggota_jabatan (anggota_id, jabatan_id, divisi_id) VALUES (:anggota_id, :jabatan_id, :divisi_id)', [
                                 'anggota_id' => $leader_id,
                                 'jabatan_id' => $jid,
-                                'departemen_id' => $departemen_id,
-                                'divisi_id' => $lastId,
+                                'divisi_id' => $lastId
                             ]);
                         }
                     } catch (Exception $ex) {
@@ -72,19 +76,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'id' => $id,
                 ]);
                 // handle Ketua Divisi assignment changes
-                try {
+                    try {
                     $jab = db_fetch('SELECT id FROM jabatan WHERE nama = :n LIMIT 1', ['n' => 'Ketua Divisi']);
                     if ($jab && isset($jab['id'])) {
                         $jid = (int)$jab['id'];
                         // remove existing Ketua assignment for this divisi
                         db_execute('DELETE FROM anggota_jabatan WHERE divisi_id = :div AND jabatan_id = :jid', ['div' => $id, 'jid' => $jid]);
-                        // if a leader selected, insert new assignment
+                        // if a leader selected, insert new assignment (departemen_id intentionally NULL)
                         if ($leader_id) {
-                            db_execute('INSERT INTO anggota_jabatan (anggota_id, jabatan_id, departemen_id, divisi_id) VALUES (:anggota_id, :jabatan_id, :departemen_id, :divisi_id)', [
+                            db_execute('INSERT INTO anggota_jabatan (anggota_id, jabatan_id, divisi_id) VALUES (:anggota_id, :jabatan_id, :divisi_id)', [
                                 'anggota_id' => $leader_id,
                                 'jabatan_id' => $jid,
-                                'departemen_id' => $departemen_id,
-                                'divisi_id' => $id,
+                                'divisi_id' => $id
                             ]);
                         }
                     }
@@ -146,10 +149,10 @@ try {
         $staffCount = $staffRow ? (int)$staffRow['c'] : 0;
         $totalStaff += $staffCount;
 
-        // Try to find a Ketua (leader) for the divisi
+        // Try to find a Ketua (leader) for the divisi. First try exact match, then a flexible LIKE match.
         $leader = db_fetch(
-            'SELECT a.* FROM anggota a JOIN anggota_jabatan aj ON aj.anggota_id = a.id JOIN jabatan j ON j.id = aj.jabatan_id WHERE aj.divisi_id = :id AND j.nama = :jabatan LIMIT 1',
-            ['id' => $divId, 'jabatan' => 'Ketua Divisi']
+            'SELECT a.* FROM anggota a JOIN anggota_jabatan aj ON aj.anggota_id = a.id LEFT JOIN jabatan j ON j.id = aj.jabatan_id WHERE aj.divisi_id = :id AND (j.nama = :jabatan OR j.nama LIKE :likejab) LIMIT 1',
+            ['id' => $divId, 'jabatan' => 'Ketua Divisi', 'likejab' => '%Ketua%Divisi%']
         );
 
         if (!$leader) {
@@ -264,6 +267,9 @@ try {
                 <p class="text-xs text-muted truncate">Super User</p>
             </div>
         </div>
+        <form method="POST" action="../login/logout.php" style="padding:12px">
+            <button type="submit" class="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl font-semibold">Keluar</button>
+        </form>
     </aside>
 
     <main class="flex-1 flex flex-col relative overflow-hidden">
@@ -346,11 +352,12 @@ try {
                             $stats = $divisiStats[$div['id']] ?? ['staffCount' => 0, 'leader' => null];
                             $leader = $stats['leader'];
                         ?>
-                            <div class="group bg-white rounded-[20px] p-4 grid grid-cols-12 gap-4 items-center shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20"
-                                 data-id="<?= htmlspecialchars($div['id']) ?>"
-                                 data-nama="<?= htmlspecialchars($div['nama']) ?>"
-                                 data-deskripsi="<?= htmlspecialchars($div['deskripsi'] ?? '') ?>"
-                                 data-departemen-id="<?= htmlspecialchars($div['departemen_id'] ?? '') ?>">
+                               <div class="group bg-white rounded-[20px] p-4 grid grid-cols-12 gap-4 items-center shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20"
+                                   data-id="<?= htmlspecialchars($div['id']) ?>"
+                                   data-nama="<?= htmlspecialchars($div['nama']) ?>"
+                                   data-deskripsi="<?= htmlspecialchars($div['deskripsi'] ?? '') ?>"
+                                   data-departemen-id="<?= htmlspecialchars($div['departemen_id'] ?? '') ?>"
+                                   data-leader-id="<?= htmlspecialchars($leader['id'] ?? '') ?>">
                                 <div class="col-span-4 flex items-center gap-4">
                                     <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg shadow-sm"><i class="fa-solid fa-photo-film"></i></div>
                                     <div>
@@ -472,12 +479,15 @@ try {
             const id = row.dataset.id || '';
             const nama = row.dataset.nama || '';
             const deskripsi = row.dataset.deskripsi || '';
-            const dept = row.dataset.departemenId || '';
+                const dept = row.dataset.departemenId || '';
+                const leader = row.dataset.leaderId || '';
 
             document.getElementById('divisiName').value = nama;
             document.getElementById('divisiTag').value = deskripsi;
             const deptSelect = document.getElementById('deptSelect');
             if (deptSelect) deptSelect.value = dept;
+            const leaderSelect = document.getElementById('leaderSelect');
+            if (leaderSelect) leaderSelect.value = leader;
 
             document.getElementById('divisiAction').value = 'update_divisi';
             document.getElementById('divisiId').value = id;

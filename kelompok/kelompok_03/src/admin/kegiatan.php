@@ -1,5 +1,12 @@
 <?php
+session_start();
+if (!isset($_SESSION['user_id']) || (isset($_SESSION['role']) && $_SESSION['role'] !== 'admin') || !isset($_SESSION['role'])) {
+    header('Location: ../login/login.php');
+    exit;
+}
 require_once __DIR__ . '/../config/db.php';
+// Date helper (Bahasa Indonesia)
+require_once __DIR__ . '/../helpers/date_helper.php';
 
 // Handle kegiatan create/update/delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -144,6 +151,9 @@ try {
                 <p class="text-xs text-muted truncate">Super User</p>
             </div>
         </div>
+        <form method="POST" action="../login/logout.php" style="padding:12px">
+            <button type="submit" class="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl font-semibold">Keluar</button>
+        </form>
     </aside>
 
     <main class="flex-1 flex flex-col relative overflow-hidden">
@@ -217,9 +227,9 @@ try {
 
                 <?php foreach ($kegiatans as $k):
                     $t = new DateTime($k['tanggal']);
-                    $day = $t->format('j');
-                    $mon = $t->format('M');
-                    $time = $t->format('H:i');
+                        $day = $t->format('j');
+                        $mon = month_short_id($k['tanggal']);
+                        $time = $t->format('H:i');
                 ?>
                  <div class="group bg-white rounded-[20px] p-5 flex items-center gap-6 shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20" id="kegiatan-<?= htmlspecialchars($k['id']) ?>"
                      data-judul="<?= htmlspecialchars($k['judul'], ENT_QUOTES) ?>"
@@ -239,7 +249,7 @@ try {
                                 <p class="text-muted text-sm line-clamp-1"><?= htmlspecialchars($k['deskripsi']) ?></p>
                                 <div class="flex flex-wrap items-center gap-4 mt-3 text-xs text-muted font-medium">
                                     <span class="flex items-center gap-1"><i class="fa-regular fa-clock"></i> <?= htmlspecialchars($time) ?> WIB</span>
-                                    <span class="flex items-center gap-1"><i class="fa-solid fa-calendar-days"></i> <?= htmlspecialchars($t->format('Y-m-d')) ?></span>
+                                    <span class="flex items-center gap-1"><i class="fa-solid fa-calendar-days"></i> <?= htmlspecialchars(format_date_id($k['tanggal'], false)) ?></span>
                                 </div>
                     </div>
                     
