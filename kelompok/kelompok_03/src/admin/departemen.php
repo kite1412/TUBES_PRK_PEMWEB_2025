@@ -5,6 +5,58 @@ function e($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
 $error = null;
 $departemen_list = [];
+// Handle create / update / delete for departemen
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'create_departemen' || $action === 'update_departemen') {
+        $isUpdate = $action === 'update_departemen';
+        $id = $isUpdate ? (int)($_POST['departemen_id'] ?? 0) : null;
+        $nama = trim((string)($_POST['nama'] ?? ''));
+        $deskripsi = trim((string)($_POST['deskripsi'] ?? ''));
+
+        if ($nama === '') {
+            $error = 'Nama departemen wajib diisi.';
+        } else {
+            try {
+                $now = date('Y-m-d H:i:s');
+                if ($isUpdate) {
+                    db_execute('UPDATE departemen SET nama = :nama, deskripsi = :deskripsi, updated_at = :updated_at WHERE id = :id', [
+                        'nama' => $nama,
+                        'deskripsi' => $deskripsi,
+                        'updated_at' => $now,
+                        'id' => $id,
+                    ]);
+                } else {
+                    db_execute('INSERT INTO departemen (nama, deskripsi, created_at, updated_at) VALUES (:nama, :deskripsi, :created_at, :updated_at)', [
+                        'nama' => $nama,
+                        'deskripsi' => $deskripsi,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                }
+                header('Location: departemen.php');
+                exit;
+            } catch (Exception $ex) {
+                $error = 'Gagal menyimpan departemen: ' . $ex->getMessage();
+            }
+        }
+    } elseif ($action === 'delete_departemen') {
+        $id = (int)($_POST['departemen_id'] ?? 0);
+        if ($id <= 0) {
+            $error = 'ID departemen tidak valid.';
+        } else {
+            try {
+                // delete departemen (consider cascade in DB if needed)
+                db_execute('DELETE FROM departemen WHERE id = :id', ['id' => $id]);
+                header('Location: departemen.php');
+                exit;
+            } catch (Exception $ex) {
+                $error = 'Gagal menghapus departemen: ' . $ex->getMessage();
+            }
+        }
+    }
+}
 try {
     // fetch all departemen
     $departemen_list = db_fetch_all('SELECT * FROM departemen ORDER BY nama ASC');
@@ -45,6 +97,13 @@ try {
         tr td:first-child { border-top-left-radius: 20px; border-bottom-left-radius: 20px; }
         tr td:last-child { border-top-right-radius: 20px; border-bottom-right-radius: 20px; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        /* Modal visibility helpers (used by script) - same as anggota.php */
+        .modal { transition: opacity 0.25s ease, visibility 0.25s ease; }
+        .modal-content { transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+        .show-modal { opacity: 1; visibility: visible; }
+        .show-modal .modal-content { transform: scale(1); }
+        .hide-modal { opacity: 0; visibility: hidden; }
+        .hide-modal .modal-content { transform: scale(0.95); }
     </style>
 </head>
 <body class="bg-canvas text-dark h-screen flex overflow-hidden font-sans antialiased">
@@ -163,7 +222,7 @@ try {
             </div>
 
             <div class="flex justify-end items-center mb-6">
-                <button class="bg-primary hover:bg-blue-700 text-white px-6 py-3 rounded-2xl shadow-lg shadow-primary/30 font-semibold text-sm flex items-center gap-2 transition-transform active:scale-95">
+                <button onclick="openCreateDepartemen()" class="bg-primary hover:bg-blue-700 text-white px-6 py-3 rounded-2xl shadow-lg shadow-primary/30 font-semibold text-sm flex items-center gap-2 transition-transform active:scale-95">
                     <i class="fa-solid fa-plus"></i>
                     Tambah Departemen
                 </button>
@@ -204,7 +263,7 @@ try {
                                 // ignore per-row error and continue
                             }
                         ?>
-                        <div class="group bg-white rounded-[20px] p-4 grid grid-cols-12 gap-4 items-center shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20">
+                        <div data-id="<?= e($id) ?>" data-nama="<?= e($nama) ?>" data-deskripsi="<?= e($deskripsi) ?>" class="group bg-white rounded-[20px] p-4 grid grid-cols-12 gap-4 items-center shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20">
                             <div class="col-span-4 flex items-center gap-4">
                                 <div class="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl shadow-sm">
                                     <i class="fa-solid fa-sitemap"></i>
@@ -230,8 +289,9 @@ try {
                             <div class="col-span-2 text-xs text-muted line-clamp-2 leading-relaxed">
                                 <?php echo e($deskripsi); ?>
                             </div>
-                            <div class="col-span-1 text-right">
-                                <button class="text-muted hover:text-primary p-2 text-lg"><i class="fa-solid fa-pen-to-square"></i></button>
+                            <div class="col-span-1 text-right flex items-center justify-end gap-2">
+                                <button type="button" onclick="openEditDepartemenFromCard(this)" class="text-sm px-3 py-1 rounded-lg bg-blue-50 text-primary hover:bg-blue-100">Edit</button>
+                                <button type="button" onclick="confirmDeleteDepartemenFromCard(this)" class="text-sm px-3 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100">Hapus</button>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -240,5 +300,122 @@ try {
             </div>
         </div>
     </main>
+    <div id="departemen-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-dark/60 backdrop-blur-sm hide-modal modal">
+        <div class="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 modal-content relative">
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="departemen-modal-title" class="text-2xl font-bold text-dark">Tambah Departemen</h2>
+                <button onclick="closeDepartemenModal()" class="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-muted hover:bg-red-50 hover:text-red-500 transition"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <?php if (!empty($error)): ?>
+                <div class="mb-4 p-3 bg-red-50 text-red-700 rounded"><?= e($error) ?></div>
+            <?php endif; ?>
+
+            <form id="departemen-form" method="post" action="departemen.php" class="space-y-4">
+                <input type="hidden" name="action" id="departemen-action" value="create_departemen">
+                <input type="hidden" name="departemen_id" id="departemen-id" value="">
+
+                <div>
+                    <label class="block text-xs font-bold text-dark uppercase mb-1">Nama</label>
+                    <input name="nama" id="departemen-nama" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" placeholder="Nama departemen">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-dark uppercase mb-1">Deskripsi</label>
+                    <textarea name="deskripsi" id="departemen-deskripsi" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" rows="4" placeholder="Deskripsi singkat..."></textarea>
+                </div>
+
+                <div class="pt-2 flex justify-end gap-2">
+                    <button type="submit" class="w-40 bg-primary hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/30 transition transform active:scale-95">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        (function(){
+            const modal = document.getElementById('departemen-modal');
+            let escHandler = null;
+
+            function openModal() {
+                if (!modal) return;
+                modal.classList.remove('hide-modal');
+                modal.classList.add('show-modal');
+                // focus first input
+                const first = modal.querySelector('input[name="nama"]');
+                if (first) first.focus();
+                // overlay click handler: close when clicking outside modal-content
+                modal.addEventListener('click', overlayClick);
+                escHandler = function(e){ if (e.key === 'Escape') closeModal(); };
+                document.addEventListener('keydown', escHandler);
+            }
+
+            function closeModal() {
+                if (!modal) return;
+                modal.classList.remove('show-modal');
+                modal.classList.add('hide-modal');
+                modal.removeEventListener('click', overlayClick);
+                if (escHandler) { document.removeEventListener('keydown', escHandler); escHandler = null; }
+            }
+
+            function overlayClick(e) {
+                // if clicked backdrop (modal) and not modal-content, close
+                const content = modal.querySelector('.modal-content');
+                if (!content) return;
+                if (!content.contains(e.target)) closeModal();
+            }
+
+            window.openCreateDepartemen = function() {
+                document.getElementById('departemen-action').value = 'create_departemen';
+                document.getElementById('departemen-id').value = '';
+                document.getElementById('departemen-nama').value = '';
+                document.getElementById('departemen-deskripsi').value = '';
+                document.getElementById('departemen-modal-title').innerText = 'Tambah Departemen';
+                openModal();
+            };
+
+            window.openEditDepartemenFromCard = function(btn) {
+                const card = btn.closest('[data-id]'); if (!card) return;
+                const id = card.getAttribute('data-id');
+                const nama = card.getAttribute('data-nama') || '';
+                const deskripsi = card.getAttribute('data-deskripsi') || '';
+                document.getElementById('departemen-action').value = 'update_departemen';
+                document.getElementById('departemen-id').value = id;
+                document.getElementById('departemen-nama').value = nama;
+                document.getElementById('departemen-deskripsi').value = deskripsi;
+                document.getElementById('departemen-modal-title').innerText = 'Edit Departemen';
+                openModal();
+            };
+
+            window.confirmDeleteDepartemenFromCard = function(btn) {
+                const card = btn.closest('[data-id]'); if (!card) return;
+                const id = card.getAttribute('data-id');
+                const nama = card.getAttribute('data-nama') || 'departemen ini';
+                if (!confirm('Hapus ' + nama + '? Tindakan ini tidak dapat dibatalkan.')) return;
+
+                // create or reuse hidden form
+                let f = document.getElementById('formDeleteDepartemen');
+                if (!f) {
+                    f = document.createElement('form');
+                    f.method = 'POST';
+                    f.style.display = 'none';
+                    f.id = 'formDeleteDepartemen';
+                    const a = document.createElement('input'); a.name = 'action'; a.value = 'delete_departemen'; f.appendChild(a);
+                    const b = document.createElement('input'); b.name = 'departemen_id'; b.id = 'deleteDepartemenId'; f.appendChild(b);
+                    document.body.appendChild(f);
+                }
+                document.getElementById('deleteDepartemenId').value = id;
+                f.submit();
+            };
+
+            window.closeDepartemenModal = function(){ closeModal(); };
+
+            // ensure hidden on load
+            if (modal) {
+                modal.classList.remove('show-modal');
+                modal.classList.add('hide-modal');
+            }
+        })();
+    </script>
 </body>
 </html>
