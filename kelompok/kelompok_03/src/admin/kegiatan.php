@@ -1,6 +1,66 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 
+// Handle kegiatan create/update/delete
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+    if ($action === 'create_kegiatan' || $action === 'update_kegiatan') {
+        $isUpdate = $action === 'update_kegiatan';
+        $id = $isUpdate ? (int)($_POST['id'] ?? 0) : null;
+        $judul = trim((string)($_POST['judul'] ?? ''));
+        $deskripsi = trim((string)($_POST['deskripsi'] ?? ''));
+        $date = trim((string)($_POST['tanggal_date'] ?? ''));
+        $time = trim((string)($_POST['tanggal_time'] ?? ''));
+
+        if ($judul === '' || $date === '') {
+            $error = 'Judul dan tanggal wajib diisi.';
+        } else {
+            try {
+                $dt = $date;
+                if ($time !== '') $dt .= ' ' . $time;
+                // normalize datetime
+                $dtObj = new DateTime($dt);
+                $dtStr = $dtObj->format('Y-m-d H:i:s');
+                $now = date('Y-m-d H:i:s');
+                if ($isUpdate && $id) {
+                    db_execute('UPDATE kegiatan SET judul = :judul, deskripsi = :deskripsi, tanggal = :tanggal, updated_at = :updated_at WHERE id = :id', [
+                        'judul' => $judul,
+                        'deskripsi' => $deskripsi,
+                        'tanggal' => $dtStr,
+                        'updated_at' => $now,
+                        'id' => $id,
+                    ]);
+                } else {
+                    db_execute('INSERT INTO kegiatan (judul, deskripsi, tanggal, created_at, updated_at) VALUES (:judul, :deskripsi, :tanggal, :created_at, :updated_at)', [
+                        'judul' => $judul,
+                        'deskripsi' => $deskripsi,
+                        'tanggal' => $dtStr,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ]);
+                }
+                header('Location: kegiatan.php');
+                exit;
+            } catch (Exception $ex) {
+                $error = 'Gagal menyimpan kegiatan: ' . $ex->getMessage();
+            }
+        }
+    } elseif ($action === 'delete_kegiatan') {
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            $error = 'ID kegiatan tidak valid.';
+        } else {
+            try {
+                db_execute('DELETE FROM kegiatan WHERE id = :id', ['id' => $id]);
+                header('Location: kegiatan.php');
+                exit;
+            } catch (Exception $ex) {
+                $error = 'Gagal menghapus kegiatan: ' . $ex->getMessage();
+            }
+        }
+    }
+}
+
 try {
     $kegiatans = db_fetch_all('SELECT * FROM kegiatan ORDER BY tanggal DESC');
     $totalKegiatan = count($kegiatans);
@@ -130,22 +190,22 @@ try {
             </div>
 
             <div class="flex justify-between items-center mb-6">
-                <div class="flex gap-3">
-                    <div class="relative group">
-                        <button class="px-5 py-2.5 rounded-full bg-white shadow-card text-muted font-medium text-sm hover:text-primary hover:shadow-md transition flex items-center gap-2">
-                            <span>Bulan Ini</span>
-                            <i class="fa-solid fa-chevron-down text-xs"></i>
-                        </button>
-                    </div>
-                    <div class="relative group">
-                        <button class="px-5 py-2.5 rounded-full bg-white shadow-card text-muted font-medium text-sm hover:text-primary hover:shadow-md transition flex items-center gap-2">
-                            <span>Status: Semua</span>
-                            <i class="fa-solid fa-chevron-down text-xs"></i>
-                        </button>
+                <div class="relative" style="position:relative;">
+                    <label for="statusBtn" class="text-sm text-muted font-medium mr-2">Status:</label>
+                    <button id="statusBtn" class="px-5 py-2.5 rounded-full bg-white shadow-card text-muted font-medium text-sm hover:text-primary hover:shadow-md transition flex items-center gap-2">
+                        <span id="statusLabel">Semua</span>
+                        <i class="fa-solid fa-chevron-down text-xs"></i>
+                    </button>
+                    <div id="statusPanel" class="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-xl hidden z-10 border border-gray-100 overflow-hidden">
+                        <div class="py-2">
+                            <button data-status="" data-name="Semua" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 status-item">Semua</button>
+                            <button data-status="upcoming" data-name="Akan Datang" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 status-item">Akan Datang</button>
+                            <button data-status="done" data-name="Selesai" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 status-item">Selesai</button>
+                        </div>
                     </div>
                 </div>
 
-                <button onclick="toggleModal(true)" class="bg-primary hover:bg-blue-700 text-white px-6 py-3 rounded-2xl shadow-lg shadow-primary/30 font-semibold text-sm flex items-center gap-2 transition-transform active:scale-95">
+                <button onclick="openCreateKegiatan()" class="bg-primary hover:bg-blue-700 text-white px-6 py-3 rounded-2xl shadow-lg shadow-primary/30 font-semibold text-sm flex items-center gap-2 transition-transform active:scale-95">
                     <i class="fa-solid fa-plus"></i>
                     Buat Kegiatan Baru
                 </button>
@@ -162,28 +222,31 @@ try {
                     $mon = $t->format('M');
                     $time = $t->format('H:i');
                 ?>
-                <div class="group bg-white rounded-[20px] p-5 flex items-center gap-6 shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20" id="kegiatan-<?= htmlspecialchars($k['id']) ?>">
+                 <div class="group bg-white rounded-[20px] p-5 flex items-center gap-6 shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20" id="kegiatan-<?= htmlspecialchars($k['id']) ?>"
+                     data-judul="<?= htmlspecialchars($k['judul'], ENT_QUOTES) ?>"
+                     data-deskripsi="<?= htmlspecialchars($k['deskripsi'] ?? '', ENT_QUOTES) ?>"
+                     data-tanggal="<?= htmlspecialchars($k['tanggal']) ?>">
                     <div class="bg-blue-50 text-primary w-20 h-20 rounded-2xl flex flex-col items-center justify-center border border-blue-100 flex-shrink-0">
                         <span class="text-2xl font-bold"><?= htmlspecialchars($day) ?></span>
                         <span class="text-xs font-semibold uppercase"><?= htmlspecialchars($mon) ?></span>
                     </div>
                     
                     <div class="flex-1 min-w-0">
-                        <div class="flex flex-wrap items-center gap-3 mb-1">
-                            <h3 class="font-bold text-dark text-lg truncate"><?= htmlspecialchars($k['judul']) ?></h3>
-                            <?php $statusLabel = ($t >= new DateTime()) ? '<span class="bg-green-100 text-green-600 px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">Akan Datang</span>' : '<span class="bg-gray-200 text-gray-600 px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">Selesai</span>'; ?>
-                            <?= $statusLabel ?>
-                        </div>
-                        <p class="text-muted text-sm line-clamp-1"><?= htmlspecialchars($k['deskripsi']) ?></p>
-                        <div class="flex flex-wrap items-center gap-4 mt-3 text-xs text-muted font-medium">
-                            <span class="flex items-center gap-1"><i class="fa-regular fa-clock"></i> <?= htmlspecialchars($time) ?> WIB</span>
-                            <span class="flex items-center gap-1"><i class="fa-solid fa-calendar-days"></i> <?= htmlspecialchars($t->format('Y-m-d')) ?></span>
-                        </div>
+                                <div class="flex flex-wrap items-center gap-3 mb-1">
+                                    <h3 class="font-bold text-dark text-lg truncate"><?= htmlspecialchars($k['judul']) ?></h3>
+                                    <?php $statusLabel = ($t >= new DateTime()) ? '<span class="bg-green-100 text-green-600 px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">Akan Datang</span>' : '<span class="bg-gray-200 text-gray-600 px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">Selesai</span>'; ?>
+                                    <?= $statusLabel ?>
+                                </div>
+                                <p class="text-muted text-sm line-clamp-1"><?= htmlspecialchars($k['deskripsi']) ?></p>
+                                <div class="flex flex-wrap items-center gap-4 mt-3 text-xs text-muted font-medium">
+                                    <span class="flex items-center gap-1"><i class="fa-regular fa-clock"></i> <?= htmlspecialchars($time) ?> WIB</span>
+                                    <span class="flex items-center gap-1"><i class="fa-solid fa-calendar-days"></i> <?= htmlspecialchars($t->format('Y-m-d')) ?></span>
+                                </div>
                     </div>
                     
                     <div class="flex gap-2">
-                        <button onclick="editItem('<?= addslashes(htmlspecialchars($k['judul'])) ?>')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-primary hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
-                        <button onclick="deleteItem('kegiatan-<?= htmlspecialchars($k['id']) ?>')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-red-500 hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-trash"></i></button>
+                                <button type="button" onclick="openEditKegiatan(<?= (int)$k['id'] ?>)" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-primary hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
+                                <button type="button" onclick='confirmDeleteKegiatan(<?= (int)$k['id'] ?>, <?= json_encode($k['judul']) ?>)' class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-red-500 hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 </div>
                 <?php endforeach; ?>
@@ -199,49 +262,36 @@ try {
                 <button onclick="toggleModal(false)" class="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-muted hover:bg-red-50 hover:text-red-500 transition"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
-            <form id="formKegiatan" class="space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-dark uppercase mb-1">Judul Kegiatan</label>
-                    <input type="text" id="inputJudul" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" placeholder="Contoh: Seminar Nasional">
-                </div>
+            <form id="formKegiatan" method="post" action="kegiatan.php" class="space-y-4">
+                        <input type="hidden" name="action" id="kegiatanAction" value="create_kegiatan">
+                        <input type="hidden" name="id" id="kegiatanId" value="">
+                        <div>
+                            <label class="block text-xs font-bold text-dark uppercase mb-1">Judul Kegiatan</label>
+                            <input type="text" id="inputJudul" name="judul" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" placeholder="Contoh: Seminar Nasional" required>
+                        </div>
                 
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-bold text-dark uppercase mb-1">Tanggal</label>
-                        <input type="date" id="inputTanggal" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-dark uppercase mb-1">Jam Mulai</label>
-                        <input type="time" id="inputJam" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition">
-                    </div>
-                </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-dark uppercase mb-1">Tanggal</label>
+                                <input type="date" id="inputTanggal" name="tanggal_date" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-dark uppercase mb-1">Jam Mulai</label>
+                                <input type="time" id="inputJam" name="tanggal_time" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition">
+                            </div>
+                        </div>
 
-                <div>
-                    <label class="block text-xs font-bold text-dark uppercase mb-1">Penyelenggara (Div/Dept)</label>
-                    <select id="inputDept" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary bg-white cursor-pointer">
-                        <option value="Dept. Kominfo">Dept. Kominfo</option>
-                        <option value="Dept. PSDM">Dept. PSDM</option>
-                        <option value="Divisi Kaderisasi">Divisi Kaderisasi</option>
-                        <option value="BPH Inti">BPH Inti</option>
-                    </select>
-                </div>
+                        <div>
+                            <label class="block text-xs font-bold text-dark uppercase mb-1">Deskripsi</label>
+                            <textarea id="inputDeskripsi" name="deskripsi" rows="3" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" placeholder="Jelaskan tujuan kegiatan..."></textarea>
+                        </div>
 
-                <div>
-                    <label class="block text-xs font-bold text-dark uppercase mb-1">Lokasi</label>
-                    <input type="text" id="inputLokasi" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" placeholder="Contoh: Aula Kampus / Zoom">
-                </div>
-
-                <div>
-                    <label class="block text-xs font-bold text-dark uppercase mb-1">Deskripsi Singkat</label>
-                    <textarea id="inputDeskripsi" rows="3" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" placeholder="Jelaskan tujuan kegiatan..."></textarea>
-                </div>
-
-                <div class="pt-2">
-                    <button type="button" onclick="simpanKegiatan()" class="w-full bg-primary hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/30 transition transform active:scale-95">
-                        Simpan & Publikasikan
-                    </button>
-                </div>
-            </form>
+                        <div class="pt-2">
+                            <button type="submit" class="w-full bg-primary hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/30 transition transform active:scale-95">
+                                Simpan & Publikasikan
+                            </button>
+                        </div>
+                    </form>
         </div>
     </div>
 
@@ -258,75 +308,140 @@ try {
             }
         }
 
-        // Delete Logic
-        function deleteItem(id) {
-            if(confirm("Yakin ingin menghapus kegiatan ini?")) {
-                const item = document.getElementById(id);
-                if (!item) return;
-                item.style.opacity = '0';
-                item.style.transform = 'scale(0.9)';
-                setTimeout(() => item.remove(), 300);
+        // Delete Logic (submits POST)
+        function confirmDeleteKegiatan(id, judul) {
+            if (!confirm("Yakin ingin menghapus kegiatan '" + (judul || '') + "' ?")) return;
+            let f = document.getElementById('formDeleteKegiatan');
+            if (!f) {
+                f = document.createElement('form');
+                f.method = 'POST';
+                f.style.display = 'none';
+                f.id = 'formDeleteKegiatan';
+                const a = document.createElement('input'); a.type = 'hidden'; a.name = 'action'; a.value = 'delete_kegiatan'; f.appendChild(a);
+                const b = document.createElement('input'); b.type = 'hidden'; b.name = 'id'; b.id = 'deleteKegiatanId'; f.appendChild(b);
+                document.body.appendChild(f);
             }
+            document.getElementById('deleteKegiatanId').value = id;
+            f.submit();
         }
 
-        // Edit Logic (Placeholder)
-        function editItem(judul) {
-            alert("Fitur Edit untuk '" + judul + "' akan membuka form dengan data terisi.");
-        }
-
-        // Add Logic (client-side only)
-        function simpanKegiatan() {
-            const judul = document.getElementById('inputJudul').value;
-            const tanggalRaw = document.getElementById('inputTanggal').value; // YYYY-MM-DD
-            const jam = document.getElementById('inputJam').value;
-            const dept = document.getElementById('inputDept').value;
-            const lokasi = document.getElementById('inputLokasi').value;
-            const deskripsi = document.getElementById('inputDeskripsi').value;
-
-            if(!judul || !tanggalRaw) { alert("Judul dan Tanggal wajib diisi!"); return; }
-
-            const dateObj = new Date(tanggalRaw);
-            const tgl = dateObj.getDate();
-            const bln = dateObj.toLocaleString('default', { month: 'short' });
-
-            const newId = 'kegiatan-' + Date.now();
-
-            const newItemHTML = `
-            <div class="group bg-white rounded-[20px] p-5 flex items-center gap-6 shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20 animate-fade-in" id="${newId}">
-                <div class="bg-blue-50 text-primary w-20 h-20 rounded-2xl flex flex-col items-center justify-center border border-blue-100 flex-shrink-0">
-                    <span class="text-2xl font-bold">${tgl}</span>
-                    <span class="text-xs font-semibold uppercase">${bln}</span>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex flex-wrap items-center gap-3 mb-1">
-                        <h3 class="font-bold text-dark text-lg truncate">${judul}</h3>
-                        <span class="bg-blue-100 text-blue-600 px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">Baru</span>
-                        <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md text-[10px] font-semibold border border-gray-200 flex items-center gap-1">
-                            <i class="fa-solid fa-bullhorn"></i> ${dept}
-                        </span>
-                    </div>
-                    <p class="text-muted text-sm line-clamp-1">${deskripsi}</p>
-                    <div class="flex flex-wrap items-center gap-4 mt-3 text-xs text-muted font-medium">
-                        <span class="flex items-center gap-1"><i class="fa-regular fa-clock"></i> ${jam} WIB</span>
-                        <span class="flex items-center gap-1"><i class="fa-solid fa-location-dot"></i> ${lokasi}</span>
-                    </div>
-                </div>
-                <div class="flex gap-2">
-                    <button onclick="editItem('${judul}')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-primary hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
-                    <button onclick="deleteItem('${newId}')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-red-500 hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-trash"></i></button>
-                </div>
-            </div>
-            `;
-
-            const list = document.getElementById('kegiatanList');
-            list.insertAdjacentHTML('afterbegin', newItemHTML);
-
+        // Filter Logic: filter by search input and status dropdown
+        function filterKegiatan() {
+            const q = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+            const statusBtnEl = document.getElementById('statusBtn');
+            const status = statusBtnEl ? (statusBtnEl.dataset.status || '') : '';
+            const list = document.querySelectorAll('#kegiatanList > div');
+            const now = new Date();
+            let visible = 0;
+            list.forEach(item => {
+                // skip the error box (which is a div without id starting with kegiatan-)
+                if (!item.id || !item.id.startsWith('kegiatan-')) return;
+                const judul = (item.querySelector('h3')?.textContent || '').toLowerCase();
+                const deskripsi = (item.querySelector('p')?.textContent || '').toLowerCase();
+                const tanggal = item.getAttribute('data-tanggal') || '';
+                let matchesQuery = true;
+                if (q !== '') {
+                    matchesQuery = judul.includes(q) || deskripsi.includes(q);
+                }
+                let matchesStatus = true;
+                if (tanggal) {
+                    const dt = new Date(tanggal);
+                    if (status === 'upcoming') {
+                        matchesStatus = dt >= now;
+                    } else if (status === 'done') {
+                        matchesStatus = dt < now;
+                    } else {
+                        matchesStatus = true;
+                    }
+                }
+                if (matchesQuery && matchesStatus) {
+                    item.style.display = '';
+                    visible++;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+            // update total shown count (top card)
             const totalEl = document.getElementById('totalKegiatan');
-            totalEl.innerText = parseInt(totalEl.innerText) + 1;
-
-            document.getElementById('formKegiatan').reset();
-            toggleModal(false);
+            if (totalEl) totalEl.textContent = String(visible);
         }
+
+        // Open edit modal and populate form from item dataset
+        function openEditKegiatan(id) {
+            const item = document.getElementById('kegiatan-' + id);
+            if (!item) return;
+            const judul = item.getAttribute('data-judul') || '';
+            const deskripsi = item.getAttribute('data-deskripsi') || '';
+            const tanggal = item.getAttribute('data-tanggal') || '';
+
+            // split tanggal into date and time
+            let datePart = '';
+            let timePart = '';
+            if (tanggal) {
+                const dt = new Date(tanggal);
+                if (!isNaN(dt)) {
+                    // to yyyy-mm-dd
+                    const yyyy = dt.getFullYear();
+                    const mm = String(dt.getMonth()+1).padStart(2,'0');
+                    const dd = String(dt.getDate()).padStart(2,'0');
+                    datePart = yyyy + '-' + mm + '-' + dd;
+                    const hh = String(dt.getHours()).padStart(2,'0');
+                    const mi = String(dt.getMinutes()).padStart(2,'0');
+                    timePart = hh + ':' + mi;
+                }
+            }
+
+            document.getElementById('kegiatanAction').value = 'update_kegiatan';
+            document.getElementById('kegiatanId').value = id;
+            document.getElementById('inputJudul').value = judul;
+            document.getElementById('inputDeskripsi').value = deskripsi;
+            document.getElementById('inputTanggal').value = datePart;
+            document.getElementById('inputJam').value = timePart;
+            toggleModal(true);
+        }
+
+        // Open create modal and reset form
+        function openCreateKegiatan() {
+            document.getElementById('kegiatanAction').value = 'create_kegiatan';
+            document.getElementById('kegiatanId').value = '';
+            document.getElementById('formKegiatan').reset();
+            toggleModal(true);
+        }
+
+        // attach listeners
+        document.addEventListener('DOMContentLoaded', function () {
+            const search = document.getElementById('searchInput');
+            const statusBtn = document.getElementById('statusBtn');
+            const statusPanel = document.getElementById('statusPanel');
+            if (search) search.addEventListener('input', filterKegiatan);
+
+            // status dropdown panel (styled like divisi page)
+            if (statusBtn && statusPanel) {
+                function showPanel(){ statusPanel.style.display = 'block'; document.addEventListener('click', outsideClick); document.addEventListener('keydown', escHandler); }
+                function hidePanel(){ statusPanel.style.display = 'none'; document.removeEventListener('click', outsideClick); document.removeEventListener('keydown', escHandler); }
+                function togglePanel(e){ e.stopPropagation(); if (statusPanel.style.display === 'block') hidePanel(); else showPanel(); }
+                function escHandler(e){ if (e.key === 'Escape') hidePanel(); }
+                function outsideClick(e){ if (!statusPanel.contains(e.target) && !statusBtn.contains(e.target)) hidePanel(); }
+
+                statusBtn.addEventListener('click', togglePanel);
+                statusPanel.style.display = 'none';
+                const items = statusPanel.querySelectorAll('.status-item');
+                for (const it of items) {
+                    it.addEventListener('click', function(){
+                        const st = this.getAttribute('data-status') || '';
+                        const name = this.getAttribute('data-name') || 'Semua';
+                        statusBtn.dataset.status = st;
+                        const label = document.getElementById('statusLabel');
+                        if (label) label.textContent = 'Status: ' + name;
+                        hidePanel();
+                        filterKegiatan();
+                    });
+                }
+            }
+
+            // initial filter to reflect current status (default Semua)
+            filterKegiatan();
+        });
     </script>
 </body>
 </html>
