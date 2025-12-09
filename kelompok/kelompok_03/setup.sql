@@ -107,3 +107,17 @@ CREATE TABLE berita (
   created_at DATETIME,
   updated_at DATETIME
 );
+
+-- default jabatan
+INSERT INTO jabatan (nama) VALUES
+('Ketua Organisasi'),
+('Wakil Ketua Organisasi'),
+('Bendahara Organisasi'),
+('Sekretaris Organisasi'),
+('Ketua Departemen'),
+('Sekretaris Departemen'),
+('Ketua Divisi'),
+('Sekretaris Divisi');
+
+INSERT INTO admin (username, password, created_at, updated_at) 
+VALUES ('admin', 'admin123', NOW(), NOW());

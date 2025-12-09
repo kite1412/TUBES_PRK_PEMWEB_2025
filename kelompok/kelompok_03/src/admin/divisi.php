@@ -1,26 +1,155 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 
+// Friendly popup message for UI (used when DB operations fail due to FK constraints)
+$friendlyError = null;
+
+// Handle create divisi POST
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+    if ($action === 'create_divisi') {
+        $nama = trim((string)($_POST['nama'] ?? ''));
+        $deskripsi = trim((string)($_POST['deskripsi'] ?? ''));
+        $departemen_id = (int)($_POST['departemen_id'] ?? 0) ?: null;
+        $leader_id = (int)($_POST['leader_id'] ?? 0) ?: null;
+        if ($nama === '') {
+            $error = 'Nama divisi wajib diisi.';
+        } else {
+            try {
+                $now = date('Y-m-d H:i:s');
+                db_execute('INSERT INTO divisi (departemen_id, nama, deskripsi, created_at, updated_at) VALUES (:departemen_id, :nama, :deskripsi, :created_at, :updated_at)', [
+                    'departemen_id' => $departemen_id,
+                    'nama' => $nama,
+                    'deskripsi' => $deskripsi,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+                // if leader selected, assign jabatan 'Ketua Divisi' to that anggota for this divisi
+                if ($leader_id) {
+                    try {
+                        $dbh = get_db();
+                        $lastId = $dbh->lastInsertId();
+                        $jab = db_fetch('SELECT id FROM jabatan WHERE nama = :n LIMIT 1', ['n' => 'Ketua Divisi']);
+                        if ($jab && isset($jab['id'])) {
+                            $jid = (int)$jab['id'];
+                            // remove existing Ketua for this divisi (if any)
+                            db_execute('DELETE FROM anggota_jabatan WHERE divisi_id = :div AND jabatan_id = :jid', ['div' => $lastId, 'jid' => $jid]);
+                            // insert assignment
+                            db_execute('INSERT INTO anggota_jabatan (anggota_id, jabatan_id, departemen_id, divisi_id) VALUES (:anggota_id, :jabatan_id, :departemen_id, :divisi_id)', [
+                                'anggota_id' => $leader_id,
+                                'jabatan_id' => $jid,
+                                'departemen_id' => $departemen_id,
+                                'divisi_id' => $lastId,
+                            ]);
+                        }
+                    } catch (Exception $ex) {
+                        // non-fatal: leave as is but set error message for admin
+                        $error = 'Divisi dibuat tetapi gagal meng-assign ketua: ' . $ex->getMessage();
+                    }
+                }
+                header('Location: divisi.php');
+                exit;
+            } catch (Exception $ex) {
+                $error = 'Gagal menambah divisi: ' . $ex->getMessage();
+            }
+        }
+    } elseif ($action === 'update_divisi') {
+        $id = (int)($_POST['id'] ?? 0);
+        $nama = trim((string)($_POST['nama'] ?? ''));
+        $deskripsi = trim((string)($_POST['deskripsi'] ?? ''));
+        $departemen_id = (int)($_POST['departemen_id'] ?? 0) ?: null;
+        $leader_id = (int)($_POST['leader_id'] ?? 0) ?: null;
+        if ($id <= 0 || $nama === '') {
+            $error = 'ID dan nama divisi wajib diisi.';
+        } else {
+            try {
+                $now = date('Y-m-d H:i:s');
+                db_execute('UPDATE divisi SET departemen_id = :departemen_id, nama = :nama, deskripsi = :deskripsi, updated_at = :updated_at WHERE id = :id', [
+                    'departemen_id' => $departemen_id,
+                    'nama' => $nama,
+                    'deskripsi' => $deskripsi,
+                    'updated_at' => $now,
+                    'id' => $id,
+                ]);
+                // handle Ketua Divisi assignment changes
+                try {
+                    $jab = db_fetch('SELECT id FROM jabatan WHERE nama = :n LIMIT 1', ['n' => 'Ketua Divisi']);
+                    if ($jab && isset($jab['id'])) {
+                        $jid = (int)$jab['id'];
+                        // remove existing Ketua assignment for this divisi
+                        db_execute('DELETE FROM anggota_jabatan WHERE divisi_id = :div AND jabatan_id = :jid', ['div' => $id, 'jid' => $jid]);
+                        // if a leader selected, insert new assignment
+                        if ($leader_id) {
+                            db_execute('INSERT INTO anggota_jabatan (anggota_id, jabatan_id, departemen_id, divisi_id) VALUES (:anggota_id, :jabatan_id, :departemen_id, :divisi_id)', [
+                                'anggota_id' => $leader_id,
+                                'jabatan_id' => $jid,
+                                'departemen_id' => $departemen_id,
+                                'divisi_id' => $id,
+                            ]);
+                        }
+                    }
+                } catch (Exception $ex) {
+                    // non-fatal: set error message
+                    $error = 'Divisi diperbarui tetapi gagal meng-assign ketua: ' . $ex->getMessage();
+                }
+                header('Location: divisi.php');
+                exit;
+            } catch (Exception $ex) {
+                $error = 'Gagal mengubah divisi: ' . $ex->getMessage();
+            }
+        }
+    } elseif ($action === 'delete_divisi') {
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id <= 0) {
+            $error = 'ID divisi tidak valid.';
+        } else {
+            try {
+                db_execute('DELETE FROM divisi WHERE id = :id', ['id' => $id]);
+                header('Location: divisi.php');
+                exit;
+            } catch (Exception $ex) {
+                // If this is a foreign-key constraint (MySQL 1451 / SQLSTATE 23000), show a friendly popup instead
+                $isFkError = false;
+                $code = (string)$ex->getCode();
+                $msg = $ex->getMessage();
+                if (stripos($code, '23000') !== false) $isFkError = true;
+                if (stripos($msg, '1451') !== false) $isFkError = true;
+                if (stripos($msg, 'Cannot delete or update a parent row') !== false) $isFkError = true;
+
+                if ($isFkError) {
+                    $friendlyError = 'Tidak dapat menghapus divisi karena masih ada anggota atau data lain yang terkait. Hapus atau pindahkan anggota terlebih dahulu.';
+                } else {
+                    $error = 'Gagal menghapus divisi: ' . $ex->getMessage();
+                }
+            }
+        }
+    }
+}
+
 try {
     // Fetch all divisi with their parent departemen name
     $divisis = db_fetch_all('SELECT d.*, dep.nama AS departemen_nama FROM divisi d LEFT JOIN departemen dep ON d.departemen_id = dep.id ORDER BY d.nama ASC');
+    // fetch departemen list for filter panel
+    $departemen_list = db_fetch_all('SELECT id, nama FROM departemen ORDER BY nama ASC');
 
     // Precompute stats
     $totalDivisi = count($divisis);
     $totalStaff = 0;
     $divisiStats = [];
+    $largestDivisiName = '--';
+    $largestDivisiCount = 0;
 
     foreach ($divisis as $div) {
         $divId = $div['id'];
 
-        $staffRow = db_fetch('SELECT COUNT(*) AS c FROM anggota_jabatan WHERE divisi_id = :id', ['id' => $divId]);
+        $staffRow = db_fetch('SELECT COUNT(DISTINCT anggota_id) AS c FROM anggota_jabatan WHERE divisi_id = :id', ['id' => $divId]);
         $staffCount = $staffRow ? (int)$staffRow['c'] : 0;
         $totalStaff += $staffCount;
 
         // Try to find a Ketua (leader) for the divisi
         $leader = db_fetch(
-            'SELECT a.* FROM anggota a JOIN anggota_jabatan aj ON aj.anggota_id = a.id JOIN jabatan j ON j.id = aj.jabatan_id WHERE aj.divisi_id = :id AND LOWER(j.nama) LIKE :ketua LIMIT 1',
-            ['id' => $divId, 'ketua' => '%ketua%']
+            'SELECT a.* FROM anggota a JOIN anggota_jabatan aj ON aj.anggota_id = a.id JOIN jabatan j ON j.id = aj.jabatan_id WHERE aj.divisi_id = :id AND j.nama = :jabatan LIMIT 1',
+            ['id' => $divId, 'jabatan' => 'Ketua Divisi']
         );
 
         if (!$leader) {
@@ -32,6 +161,12 @@ try {
             'staffCount' => $staffCount,
             'leader' => $leader,
         ];
+
+        // Track largest divisi
+        if ($staffCount > $largestDivisiCount) {
+            $largestDivisiCount = $staffCount;
+            $largestDivisiName = $div['nama'] ?: '--';
+        }
     }
 
 } catch (Exception $e) {
@@ -85,6 +220,14 @@ try {
 </head>
 <body class="bg-canvas text-dark h-screen flex overflow-hidden font-sans antialiased">
 
+    <?php if (!empty($friendlyError)): ?>
+        <script>
+            window.addEventListener('DOMContentLoaded', function(){
+                alert(<?= json_encode($friendlyError) ?>);
+            });
+        </script>
+    <?php endif; ?>
+
     <aside class="w-72 bg-white h-full flex flex-col py-8 px-5 z-20 shadow-xl shadow-blue-900/5">
         <div class="flex items-center gap-3 px-4 mb-10">
             <div class="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center text-xl shadow-lg shadow-primary/40">
@@ -129,12 +272,6 @@ try {
                 <p class="text-muted text-sm font-medium">Dashboard Admin</p>
                 <h1 class="text-3xl font-bold text-dark mt-1">Manajemen Divisi</h1>
             </div>
-            
-            <div class="bg-white p-2 pl-6 pr-2 rounded-full shadow-card flex items-center gap-4 w-[400px]">
-                <i class="fa-solid fa-magnifying-glass text-muted"></i>
-                <input type="text" placeholder="Cari divisi..." class="bg-transparent flex-1 outline-none text-sm text-dark placeholder:text-muted/70">
-                <button class="w-10 h-10 rounded-full flex items-center justify-center text-muted hover:text-primary bg-gray-50"><i class="fa-regular fa-bell"></i></button>
-            </div>
         </header>
 
         <div class="flex-1 overflow-y-auto px-10 pb-10 no-scrollbar">
@@ -159,22 +296,26 @@ try {
                 <div class="bg-white p-5 rounded-[20px] shadow-card flex items-center justify-between border-l-4 border-purple-500">
                     <div>
                         <p class="text-sm text-muted font-medium mb-1">Divisi Terbesar</p>
-                        <h2 class="text-lg font-bold text-dark truncate w-32">--</h2>
-                        <p class="text-xs text-muted mt-1">-- Anggota</p>
+                        <h2 class="text-lg font-bold text-dark truncate w-32"><?php echo htmlspecialchars($largestDivisiName); ?></h2>
+                        <p class="text-xs text-muted mt-1"><?php echo htmlspecialchars($largestDivisiCount); ?> Anggota</p>
                     </div>
                     <div class="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-xl"><i class="fa-solid fa-ranking-star"></i></div>
                 </div>
             </div>
 
             <div class="flex justify-between items-center mb-6">
-                <div class="relative group">
-                    <button class="px-5 py-2.5 rounded-full bg-white shadow-card text-muted font-medium text-sm hover:text-primary hover:shadow-md transition flex items-center gap-2">
-                        <span>Filter Departemen</span>
+                <div class="relative" style="position:relative;">
+                    <button id="filterDeptBtn" class="px-5 py-2.5 rounded-full bg-white shadow-card text-muted font-medium text-sm hover:text-primary hover:shadow-md transition flex items-center gap-2">
+                        <span id="filterDeptLabel">Semua Departemen</span>
                         <i class="fa-solid fa-chevron-down text-xs"></i>
                     </button>
-                    <div class="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl hidden group-hover:block z-10 border border-gray-100 overflow-hidden">
-                        <!-- Could populate dynamically if needed -->
-                        <a href="#" class="block px-4 py-2 text-sm text-dark hover:bg-blue-50 hover:text-primary">Semua Departemen</a>
+                    <div id="filterDeptPanel" class="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-xl hidden z-10 border border-gray-100 overflow-hidden">
+                        <div class="py-2">
+                            <button data-dep-id="" data-dep-name="Semua Departemen" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 filter-dep-item">Semua Departemen</button>
+                            <?php if (!empty($departemen_list)): foreach ($departemen_list as $dp): ?>
+                                <button data-dep-id="<?= htmlspecialchars($dp['id']) ?>" data-dep-name="<?= htmlspecialchars($dp['nama']) ?>" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 filter-dep-item"><?= htmlspecialchars($dp['nama']) ?></button>
+                            <?php endforeach; endif; ?>
+                        </div>
                     </div>
                 </div>
 
@@ -205,7 +346,11 @@ try {
                             $stats = $divisiStats[$div['id']] ?? ['staffCount' => 0, 'leader' => null];
                             $leader = $stats['leader'];
                         ?>
-                            <div class="group bg-white rounded-[20px] p-4 grid grid-cols-12 gap-4 items-center shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20">
+                            <div class="group bg-white rounded-[20px] p-4 grid grid-cols-12 gap-4 items-center shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20"
+                                 data-id="<?= htmlspecialchars($div['id']) ?>"
+                                 data-nama="<?= htmlspecialchars($div['nama']) ?>"
+                                 data-deskripsi="<?= htmlspecialchars($div['deskripsi'] ?? '') ?>"
+                                 data-departemen-id="<?= htmlspecialchars($div['departemen_id'] ?? '') ?>">
                                 <div class="col-span-4 flex items-center gap-4">
                                     <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg shadow-sm"><i class="fa-solid fa-photo-film"></i></div>
                                     <div>
@@ -227,7 +372,10 @@ try {
                                         <span class="text-xs font-bold text-dark">Belum Ada</span>
                                     <?php endif; ?>
                                 </div>
-                                <div class="col-span-1 text-right"><button class="text-muted hover:text-primary px-2"><i class="fa-solid fa-pen-to-square text-lg"></i></button></div>
+                                <div class="col-span-1 text-right">
+                                    <button type="button" onclick="openEditModalFromRow(this)" class="text-sm px-3 py-1 rounded-lg bg-blue-50 text-primary hover:bg-blue-100">Edit</button>
+                                    <button type="button" onclick='confirmDeleteDivisi(<?= htmlspecialchars($div['id']) ?>, <?= json_encode($div['nama']) ?>)' class="text-sm px-3 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 ml-2">Hapus</button>
+                                </div>
                             </div>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -245,21 +393,23 @@ try {
                 <button onclick="toggleModal(false)" class="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-muted hover:bg-red-50 hover:text-red-500 transition"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
-            <form id="addDivisiForm" class="space-y-5">
+            <form id="addDivisiForm" method="post" action="divisi.php" class="space-y-5">
+                <input type="hidden" id="divisiAction" name="action" value="create_divisi">
+                <input type="hidden" id="divisiId" name="id" value="">
                 <div>
                     <label class="block text-xs font-bold text-dark uppercase mb-1">Nama Divisi</label>
-                    <input type="text" id="divisiName" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition" placeholder="Contoh: Multimedia">
+                    <input type="text" id="divisiName" name="nama" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition" placeholder="Contoh: Multimedia">
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-dark uppercase mb-1">Tagline / Deskripsi Singkat</label>
-                    <input type="text" id="divisiTag" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition" placeholder="Contoh: Creative Team">
+                    <label class="block text-xs font-bold text-dark uppercase mb-1">Deskripsi</label>
+                    <input type="text" id="divisiTag" name="deskripsi" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition" placeholder="Contoh: Creative Team">
                 </div>
 
                 <div>
                     <label class="block text-xs font-bold text-dark uppercase mb-1">Induk Departemen</label>
                     <div class="relative">
-                        <select id="deptSelect" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition appearance-none bg-white cursor-pointer">
+                        <select id="deptSelect" name="departemen_id" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition appearance-none bg-white cursor-pointer">
                             <option value="">-- Pilih Departemen --</option>
                             <?php
                                 // Simple department list for the select
@@ -277,7 +427,7 @@ try {
                 <div>
                     <label class="block text-xs font-bold text-dark uppercase mb-1">Ketua Divisi</label>
                     <div class="relative">
-                        <select id="leaderSelect" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition appearance-none bg-white cursor-pointer">
+                        <select id="leaderSelect" name="leader_id" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition appearance-none bg-white cursor-pointer">
                             <option value="">-- Pilih Anggota --</option>
                             <?php
                                 $allAnggota = db_fetch_all('SELECT id, nama FROM anggota ORDER BY nama ASC');
@@ -291,13 +441,18 @@ try {
                 </div>
 
                 <div class="pt-2">
-                    <button type="button" onclick="handleAddDivisi()" class="w-full bg-primary hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/30 transition transform active:scale-95">
+                    <button type="submit" class="w-full bg-primary hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/30 transition transform active:scale-95">
                         Simpan Divisi
                     </button>
                 </div>
             </form>
         </div>
     </div>
+
+    <form id="formDeleteDivisi" method="post" action="divisi.php" style="display:none;">
+        <input type="hidden" name="action" value="delete_divisi">
+        <input type="hidden" id="deleteDivisiId" name="id" value="">
+    </form>
 
     <script>
         function toggleModal(show) {
@@ -310,43 +465,63 @@ try {
                 modal.classList.add('hide-modal');
             }
         }
+        
+        function openEditModalFromRow(btn) {
+            const row = btn.closest('.group');
+            if (!row) return;
+            const id = row.dataset.id || '';
+            const nama = row.dataset.nama || '';
+            const deskripsi = row.dataset.deskripsi || '';
+            const dept = row.dataset.departemenId || '';
 
-        function handleAddDivisi() {
-            const name = document.getElementById('divisiName').value;
-            const tag = document.getElementById('divisiTag').value || 'General Team';
-            const dept = document.getElementById('deptSelect').value;
-            const leader = document.getElementById('leaderSelect').value;
+            document.getElementById('divisiName').value = nama;
+            document.getElementById('divisiTag').value = deskripsi;
+            const deptSelect = document.getElementById('deptSelect');
+            if (deptSelect) deptSelect.value = dept;
 
-            if(!name) { alert("Nama divisi wajib diisi!"); return; }
-
-            // This client-side add is only visual. For persistence, call a backend API.
-            const newRow = `
-            <div class="group bg-white rounded-[20px] p-4 grid grid-cols-12 gap-4 items-center shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20 animate-fade-in">
-                <div class="col-span-4 flex items-center gap-4">
-                    <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg shadow-sm"><i class="fa-solid fa-cube"></i></div>
-                    <div>
-                        <h3 class="font-bold text-dark text-sm group-hover:text-primary transition">${name}</h3>
-                        <p class="text-[10px] text-muted">${tag}</p>
-                    </div>
-                </div>
-                <div class="col-span-3">
-                    <span class="bg-blue-50 text-blue-600 border border-blue-100 px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-2 w-fit"><i class="fa-solid fa-bullhorn text-[10px]"></i> ${dept}</span>
-                </div>
-                <div class="col-span-2 text-sm font-bold text-dark pl-2">0 Orang</div>
-                <div class="col-span-2 flex items-center gap-2">
-                    <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(document.getElementById('leaderSelect').selectedOptions[0].text)}&background=random" class="w-8 h-8 rounded-full border border-white shadow-sm">
-                    <span class="text-xs font-bold text-dark">${document.getElementById('leaderSelect').selectedOptions[0].text}</span>
-                </div>
-                <div class="col-span-1 text-right"><button class="text-muted hover:text-primary px-2"><i class="fa-solid fa-pen-to-square text-lg"></i></button></div>
-            </div>
-            `;
-
-            const container = document.getElementById('divisiContainer');
-            container.insertAdjacentHTML('afterbegin', newRow);
-
-            document.getElementById('addDivisiForm').reset();
-            toggleModal(false);
+            document.getElementById('divisiAction').value = 'update_divisi';
+            document.getElementById('divisiId').value = id;
+            toggleModal(true);
         }
+
+        function confirmDeleteDivisi(id, name) {
+            const text = 'Hapus divisi "' + (name || '') + '"? Tindakan ini tidak dapat dibatalkan.';
+            if (!confirm(text)) return;
+            const form = document.getElementById('formDeleteDivisi');
+            document.getElementById('deleteDivisiId').value = id;
+            form.submit();
+        }
+        
+        // Filter Departemen panel + client-side filtering
+        (function(){
+            const panel = document.getElementById('filterDeptPanel');
+            const btn = document.getElementById('filterDeptBtn');
+            const label = document.getElementById('filterDeptLabel');
+            const items = panel ? panel.querySelectorAll('.filter-dep-item') : [];
+            const rows = Array.from(document.querySelectorAll('[data-departemen-id]'));
+
+            // Use direct style toggling to avoid relying on utility classes
+            function showPanel(){ if (!panel) return; panel.style.display = 'block'; document.addEventListener('click', outsideClick); document.addEventListener('keydown', escHandler); }
+            function hidePanel(){ if (!panel) return; panel.style.display = 'none'; document.removeEventListener('click', outsideClick); document.removeEventListener('keydown', escHandler); }
+            function togglePanel(){ if (!panel) return; if (panel.style.display === 'block') hidePanel(); else showPanel(); }
+
+            function escHandler(e){ if (e.key === 'Escape') hidePanel(); }
+            function outsideClick(e){ if (!panel.contains(e.target) && !btn.contains(e.target)) hidePanel(); }
+
+            function applyFilter(depId, depName){
+                if (label) label.textContent = depName || 'Semua Departemen';
+                for (const r of rows){
+                    const rowDep = r.getAttribute('data-departemen-id') || '';
+                    if (!depId) { r.style.display = ''; } else { r.style.display = (rowDep === String(depId)) ? '' : 'none'; }
+                }
+                hidePanel();
+            }
+
+            if (btn) btn.addEventListener('click', function(e){ e.stopPropagation(); togglePanel(); });
+            // ensure panel is hidden initially (in case CSS classes are missing)
+            if (panel) panel.style.display = 'none';
+            for (const it of items){ it.addEventListener('click', function(){ const id = this.getAttribute('data-dep-id') || ''; const name = this.getAttribute('data-dep-name') || ''; applyFilter(id, name); }); }
+        })();
     </script>
 </body>
 </html>
