@@ -1,3 +1,25 @@
+<?php
+require_once __DIR__ . '/../config/db.php';
+
+try {
+    $kegiatans = db_fetch_all('SELECT * FROM kegiatan ORDER BY tanggal DESC');
+    $totalKegiatan = count($kegiatans);
+
+    $now = new DateTime();
+    $upcoming = 0;
+    $done = 0;
+    foreach ($kegiatans as $k) {
+        $t = new DateTime($k['tanggal']);
+        if ($t >= $now) $upcoming++; else $done++;
+    }
+} catch (Exception $e) {
+    $error = $e->getMessage();
+    $kegiatans = [];
+    $totalKegiatan = 0;
+    $upcoming = 0;
+    $done = 0;
+}
+?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -47,12 +69,12 @@
         </div>
 
         <nav class="flex-1 space-y-2">
-            <a href="index.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-users w-5 text-center"></i><span>Anggota</span></a>
-            <a href="departemen.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-sitemap w-5 text-center"></i><span>Departemen</span></a>
-            <a href="divisi.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-network-wired w-5 text-center"></i><span>Divisi</span></a>
-            <a href="kegiatan.html" class="flex items-center gap-4 px-4 py-4 bg-primary text-white rounded-2xl shadow-lg shadow-primary/30 font-bold hover:scale-105 transition-transform"><i class="fa-regular fa-calendar-check w-5 text-center"></i><span>Kegiatan</span></a>
-            <a href="berita.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-regular fa-newspaper w-5 text-center"></i><span>Berita</span></a>
-            <a href="pengumuman.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-bullhorn w-5 text-center"></i><span>Pengumuman</span></a>
+            <a href="anggota.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-users w-5 text-center"></i><span>Anggota</span></a>
+            <a href="departemen.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-sitemap w-5 text-center"></i><span>Departemen</span></a>
+            <a href="divisi.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-network-wired w-5 text-center"></i><span>Divisi</span></a>
+            <a href="kegiatan.php" class="flex items-center gap-4 px-4 py-4 bg-primary text-white rounded-2xl shadow-lg shadow-primary/30 font-bold hover:scale-105 transition-transform"><i class="fa-regular fa-calendar-check w-5 text-center"></i><span>Kegiatan</span></a>
+            <a href="berita.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-regular fa-newspaper w-5 text-center"></i><span>Berita</span></a>
+            <a href="pengumuman.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-bullhorn w-5 text-center"></i><span>Pengumuman</span></a>
         </nav>
 
         <div class="mt-auto flex items-center gap-3 p-3 rounded-2xl border border-gray-100 bg-gray-50/50">
@@ -84,7 +106,7 @@
                 <div class="bg-white p-5 rounded-[20px] shadow-card border-l-4 border-primary flex items-center justify-between">
                     <div>
                         <p class="text-sm text-muted font-medium">Total Kegiatan</p>
-                        <h2 class="text-2xl font-bold text-dark" id="totalKegiatan">12</h2>
+                        <h2 class="text-2xl font-bold text-dark" id="totalKegiatan"><?= htmlspecialchars($totalKegiatan) ?></h2>
                         <p class="text-xs text-muted mt-1">Tahun ini</p>
                     </div>
                     <div class="w-12 h-12 bg-blue-50 text-primary rounded-xl flex items-center justify-center text-xl"><i class="fa-solid fa-list-check"></i></div>
@@ -92,7 +114,7 @@
                 <div class="bg-white p-5 rounded-[20px] shadow-card border-l-4 border-green-500 flex items-center justify-between">
                     <div>
                         <p class="text-sm text-muted font-medium">Akan Datang</p>
-                        <h2 class="text-2xl font-bold text-dark">3</h2>
+                        <h2 class="text-2xl font-bold text-dark"><?= htmlspecialchars($upcoming) ?></h2>
                         <p class="text-xs text-green-500 font-bold mt-1">Segera dilaksanakan</p>
                     </div>
                     <div class="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center text-xl"><i class="fa-regular fa-clock"></i></div>
@@ -100,7 +122,7 @@
                 <div class="bg-white p-5 rounded-[20px] shadow-card border-l-4 border-gray-400 flex items-center justify-between">
                     <div>
                         <p class="text-sm text-muted font-medium">Selesai</p>
-                        <h2 class="text-2xl font-bold text-dark">9</h2>
+                        <h2 class="text-2xl font-bold text-dark"><?= htmlspecialchars($done) ?></h2>
                         <p class="text-xs text-muted mt-1">Terlaksana sukses</p>
                     </div>
                     <div class="w-12 h-12 bg-gray-100 text-gray-600 rounded-xl flex items-center justify-center text-xl"><i class="fa-solid fa-check-double"></i></div>
@@ -130,58 +152,41 @@
             </div>
 
             <div class="w-full space-y-4" id="kegiatanList">
-                
-                <div class="group bg-white rounded-[20px] p-5 flex items-center gap-6 shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20 animate-fade-in" id="kegiatan-1">
-                    <div class="bg-blue-50 text-primary w-20 h-20 rounded-2xl flex flex-col items-center justify-center border border-blue-100 flex-shrink-0">
-                        <span class="text-2xl font-bold">12</span>
-                        <span class="text-xs font-semibold uppercase">Des</span>
-                    </div>
-                    
-                    <div class="flex-1 min-w-0">
-                        <div class="flex flex-wrap items-center gap-3 mb-1">
-                            <h3 class="font-bold text-dark text-lg truncate">Webinar Teknologi AI</h3>
-                            <span class="bg-green-100 text-green-600 px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">Akan Datang</span>
-                            <span class="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-md text-[10px] font-semibold border border-indigo-100 flex items-center gap-1">
-                                <i class="fa-solid fa-bullhorn"></i> Dept. Kominfo
-                            </span>
-                        </div>
-                        <p class="text-muted text-sm line-clamp-1">Seminar online membahas perkembangan AI di industri kreatif masa kini.</p>
-                        <div class="flex flex-wrap items-center gap-4 mt-3 text-xs text-muted font-medium">
-                            <span class="flex items-center gap-1"><i class="fa-regular fa-clock"></i> 09:00 - 12:00 WIB</span>
-                            <span class="flex items-center gap-1"><i class="fa-solid fa-location-dot"></i> Zoom Meeting</span>
-                        </div>
-                    </div>
-                    
-                    <div class="flex gap-2">
-                        <button onclick="editItem('Webinar Teknologi AI')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-primary hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
-                        <button onclick="deleteItem('kegiatan-1')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-red-500 hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                </div>
+                <?php if (!empty($error)): ?>
+                    <div class="text-red-600 p-4 bg-white rounded-lg shadow-card"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
 
-                <div class="group bg-white rounded-[20px] p-5 flex items-center gap-6 shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20 opacity-80 hover:opacity-100" id="kegiatan-2">
-                    <div class="bg-gray-100 text-gray-500 w-20 h-20 rounded-2xl flex flex-col items-center justify-center flex-shrink-0">
-                        <span class="text-2xl font-bold">20</span>
-                        <span class="text-xs font-semibold uppercase">Nov</span>
+                <?php foreach ($kegiatans as $k):
+                    $t = new DateTime($k['tanggal']);
+                    $day = $t->format('j');
+                    $mon = $t->format('M');
+                    $time = $t->format('H:i');
+                ?>
+                <div class="group bg-white rounded-[20px] p-5 flex items-center gap-6 shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20" id="kegiatan-<?= htmlspecialchars($k['id']) ?>">
+                    <div class="bg-blue-50 text-primary w-20 h-20 rounded-2xl flex flex-col items-center justify-center border border-blue-100 flex-shrink-0">
+                        <span class="text-2xl font-bold"><?= htmlspecialchars($day) ?></span>
+                        <span class="text-xs font-semibold uppercase"><?= htmlspecialchars($mon) ?></span>
                     </div>
+                    
                     <div class="flex-1 min-w-0">
                         <div class="flex flex-wrap items-center gap-3 mb-1">
-                            <h3 class="font-bold text-dark text-lg truncate">Workshop Desain Grafis</h3>
-                            <span class="bg-gray-200 text-gray-600 px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">Selesai</span>
-                            <span class="bg-purple-50 text-purple-600 px-2 py-0.5 rounded-md text-[10px] font-semibold border border-purple-100 flex items-center gap-1">
-                                <i class="fa-solid fa-users-rays"></i> Dept. PSDM
-                            </span>
+                            <h3 class="font-bold text-dark text-lg truncate"><?= htmlspecialchars($k['judul']) ?></h3>
+                            <?php $statusLabel = ($t >= new DateTime()) ? '<span class="bg-green-100 text-green-600 px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">Akan Datang</span>' : '<span class="bg-gray-200 text-gray-600 px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide">Selesai</span>'; ?>
+                            <?= $statusLabel ?>
                         </div>
-                        <p class="text-muted text-sm line-clamp-1">Pelatihan dasar Figma untuk anggota baru.</p>
+                        <p class="text-muted text-sm line-clamp-1"><?= htmlspecialchars($k['deskripsi']) ?></p>
                         <div class="flex flex-wrap items-center gap-4 mt-3 text-xs text-muted font-medium">
-                            <span class="flex items-center gap-1"><i class="fa-regular fa-clock"></i> 13:00 - 15:00 WIB</span>
-                            <span class="flex items-center gap-1"><i class="fa-solid fa-location-dot"></i> Lab Komputer</span>
+                            <span class="flex items-center gap-1"><i class="fa-regular fa-clock"></i> <?= htmlspecialchars($time) ?> WIB</span>
+                            <span class="flex items-center gap-1"><i class="fa-solid fa-calendar-days"></i> <?= htmlspecialchars($t->format('Y-m-d')) ?></span>
                         </div>
                     </div>
+                    
                     <div class="flex gap-2">
-                        <button onclick="editItem('Workshop Desain Grafis')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-primary hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
-                        <button onclick="deleteItem('kegiatan-2')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-red-500 hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-trash"></i></button>
+                        <button onclick="editItem('<?= addslashes(htmlspecialchars($k['judul'])) ?>')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-primary hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="deleteItem('kegiatan-<?= htmlspecialchars($k['id']) ?>')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-red-500 hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 </div>
+                <?php endforeach; ?>
 
             </div>
         </div>
@@ -257,6 +262,7 @@
         function deleteItem(id) {
             if(confirm("Yakin ingin menghapus kegiatan ini?")) {
                 const item = document.getElementById(id);
+                if (!item) return;
                 item.style.opacity = '0';
                 item.style.transform = 'scale(0.9)';
                 setTimeout(() => item.remove(), 300);
@@ -268,9 +274,8 @@
             alert("Fitur Edit untuk '" + judul + "' akan membuka form dengan data terisi.");
         }
 
-        // Add Logic
+        // Add Logic (client-side only)
         function simpanKegiatan() {
-            // 1. Ambil Data
             const judul = document.getElementById('inputJudul').value;
             const tanggalRaw = document.getElementById('inputTanggal').value; // YYYY-MM-DD
             const jam = document.getElementById('inputJam').value;
@@ -280,22 +285,18 @@
 
             if(!judul || !tanggalRaw) { alert("Judul dan Tanggal wajib diisi!"); return; }
 
-            // Format Tanggal (Simple)
             const dateObj = new Date(tanggalRaw);
             const tgl = dateObj.getDate();
-            const bln = dateObj.toLocaleString('default', { month: 'short' }); // Des, Nov, etc
+            const bln = dateObj.toLocaleString('default', { month: 'short' });
 
-            // 2. Generate ID Unik
             const newId = 'kegiatan-' + Date.now();
 
-            // 3. Template HTML Baru
             const newItemHTML = `
             <div class="group bg-white rounded-[20px] p-5 flex items-center gap-6 shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20 animate-fade-in" id="${newId}">
                 <div class="bg-blue-50 text-primary w-20 h-20 rounded-2xl flex flex-col items-center justify-center border border-blue-100 flex-shrink-0">
                     <span class="text-2xl font-bold">${tgl}</span>
                     <span class="text-xs font-semibold uppercase">${bln}</span>
                 </div>
-                
                 <div class="flex-1 min-w-0">
                     <div class="flex flex-wrap items-center gap-3 mb-1">
                         <h3 class="font-bold text-dark text-lg truncate">${judul}</h3>
@@ -310,7 +311,6 @@
                         <span class="flex items-center gap-1"><i class="fa-solid fa-location-dot"></i> ${lokasi}</span>
                     </div>
                 </div>
-                
                 <div class="flex gap-2">
                     <button onclick="editItem('${judul}')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-primary hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
                     <button onclick="deleteItem('${newId}')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-red-500 hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-trash"></i></button>
@@ -318,15 +318,12 @@
             </div>
             `;
 
-            // 4. Masukkan ke List
             const list = document.getElementById('kegiatanList');
             list.insertAdjacentHTML('afterbegin', newItemHTML);
 
-            // 5. Update Stats
             const totalEl = document.getElementById('totalKegiatan');
             totalEl.innerText = parseInt(totalEl.innerText) + 1;
 
-            // 6. Reset & Close
             document.getElementById('formKegiatan').reset();
             toggleModal(false);
         }

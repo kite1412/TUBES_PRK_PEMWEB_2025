@@ -1,3 +1,30 @@
+<?php
+require_once __DIR__ . '/../config/db.php';
+
+function e($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+
+$error = null;
+$anggota_list = [];
+try {
+    // fetch all anggota
+    $anggota_list = db_fetch_all('SELECT * FROM anggota ORDER BY nama ASC');
+    $total = count($anggota_list);
+    // compute new anggota this month using date range (works for MySQL and SQLite text datetimes)
+    $start = (new DateTime('first day of this month'))->format('Y-m-d 00:00:00');
+    $end = (new DateTime('first day of next month'))->format('Y-m-d 00:00:00');
+    $newRow = db_fetch('SELECT COUNT(*) AS c FROM anggota WHERE created_at >= :start AND created_at < :end', ['start' => $start, 'end' => $end]);
+    $anggota_baru = $newRow ? (int)$newRow['c'] : 0;
+
+    // total departemen count
+    $depRow = db_fetch('SELECT COUNT(*) AS c FROM departemen');
+    $total_departemen = $depRow ? (int)$depRow['c'] : 0;
+} catch (Exception $ex) {
+    $error = $ex->getMessage();
+    $total = 0;
+    $anggota_baru = 0;
+    $total_departemen = 0;
+}
+?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -44,27 +71,27 @@
         </div>
 
         <nav class="flex-1 space-y-2">
-            <a href="index.html" class="flex items-center gap-4 px-4 py-4 bg-primary text-white rounded-2xl shadow-lg shadow-primary/30 font-bold hover:scale-105 transition-transform">
+            <a href="anggota.php" class="flex items-center gap-4 px-4 py-4 bg-primary text-white rounded-2xl shadow-lg shadow-primary/30 font-bold hover:scale-105 transition-transform">
                 <i class="fa-solid fa-users w-5 text-center"></i>
                 <span>Anggota</span>
             </a>
-            <a href="departemen.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
+            <a href="departemen.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
                 <i class="fa-solid fa-sitemap w-5 text-center"></i>
                 <span>Departemen</span>
             </a>
-            <a href="divisi.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
+            <a href="divisi.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
                 <i class="fa-solid fa-network-wired w-5 text-center"></i>
                 <span>Divisi</span>
             </a>
-            <a href="kegiatan.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
+            <a href="kegiatan.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
                 <i class="fa-regular fa-calendar-check w-5 text-center"></i>
                 <span>Kegiatan</span>
             </a>
-            <a href="berita.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
+            <a href="berita.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
                 <i class="fa-regular fa-newspaper w-5 text-center"></i>
                 <span>Berita</span>
             </a>
-            <a href="pengumuman.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
+            <a href="pengumuman.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
                 <i class="fa-solid fa-bullhorn w-5 text-center"></i>
                 <span>Pengumuman</span>
             </a>
@@ -103,7 +130,7 @@
                 <div class="bg-white p-5 rounded-[20px] shadow-card flex items-center justify-between border-l-4 border-primary">
                     <div>
                         <p class="text-sm text-muted font-medium mb-1">Total Anggota</p>
-                        <h2 class="text-2xl font-bold text-dark">1,240</h2>
+                        <h2 class="text-2xl font-bold text-dark"><?php echo e($total); ?></h2>
                         <p class="text-xs text-muted mt-1">Terdaftar di sistem</p>
                     </div>
                     <div class="w-12 h-12 bg-blue-50 text-primary rounded-xl flex items-center justify-center text-xl">
@@ -114,7 +141,7 @@
                 <div class="bg-white p-5 rounded-[20px] shadow-card flex items-center justify-between border-l-4 border-green-500">
                     <div>
                         <p class="text-sm text-muted font-medium mb-1">Anggota Baru</p>
-                        <h2 class="text-2xl font-bold text-dark">+12</h2>
+                        <h2 class="text-2xl font-bold text-dark"><?= e($anggota_baru) ?></h2>
                         <p class="text-xs text-green-500 font-bold mt-1">Bulan Ini</p>
                     </div>
                     <div class="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center text-xl">
@@ -125,7 +152,7 @@
                 <div class="bg-white p-5 rounded-[20px] shadow-card flex items-center justify-between border-l-4 border-purple-500">
                     <div>
                         <p class="text-sm text-muted font-medium mb-1">Total Departemen</p>
-                        <h2 class="text-2xl font-bold text-dark">8</h2>
+                        <h2 class="text-2xl font-bold text-dark"><?= e($total_departemen) ?></h2>
                         <p class="text-xs text-muted mt-1">Aktif beroperasi</p>
                     </div>
                     <div class="w-12 h-12 bg-purple-50 text-purple-500 rounded-xl flex items-center justify-center text-xl">
@@ -141,11 +168,6 @@
                             <span>Semua Departemen</span>
                             <i class="fa-solid fa-chevron-down text-xs"></i>
                         </button>
-                        <div class="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl hidden group-hover:block z-10 border border-gray-100 overflow-hidden">
-                            <a href="#" class="block px-4 py-2 text-sm text-dark hover:bg-blue-50 hover:text-primary">Kominfo</a>
-                            <a href="#" class="block px-4 py-2 text-sm text-dark hover:bg-blue-50 hover:text-primary">PSDM</a>
-                            <a href="#" class="block px-4 py-2 text-sm text-dark hover:bg-blue-50 hover:text-primary">Hubungan Luar</a>
-                        </div>
                     </div>
 
                     <button class="px-5 py-2.5 rounded-full bg-white shadow-card text-muted font-medium text-sm hover:text-primary hover:shadow-md transition">
@@ -168,94 +190,45 @@
                     <div class="col-span-1 text-right">Aksi</div>
                 </div>
 
-                <div class="space-y-4"> 
-                    <div class="group bg-white rounded-[20px] p-4 grid grid-cols-12 gap-4 items-center shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20">
-                        <div class="col-span-4 flex items-center gap-4">
-                            <img src="https://ui-avatars.com/api/?name=Rizky+Fatur&background=random" class="w-12 h-12 rounded-full object-cover">
-                            <div>
-                                <h3 class="font-bold text-dark text-sm group-hover:text-primary transition">Rizky Fatur</h3>
-                                <p class="text-xs text-muted">@rizkyfatur</p>
-                            </div>
-                        </div>
-                        <div class="col-span-2 font-bold text-dark text-sm">14117099</div>
-                        <div class="col-span-3 text-sm text-dark font-medium">Kominfo <span class="text-muted text-xs">• Multimedia</span></div>
-                        <div class="col-span-2">
-                            <span class="bg-blue-50 text-primary px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1">
-                                Kepala Dept
-                            </span>
-                        </div>
-                        <div class="col-span-1 text-right">
-                            <button class="text-muted hover:text-primary p-2 text-lg"><i class="fa-solid fa-ellipsis-vertical"></i></button>
-                        </div>
-                    </div>
+                <div class="space-y-4">
+                    <?php if ($error): ?>
+                        <div class="p-4 bg-red-50 text-red-700 rounded">Error: <?php echo e($error); ?></div>
+                    <?php endif; ?>
 
-                    <div class="bg-primary rounded-[20px] p-5 grid grid-cols-12 gap-4 items-center shadow-xl shadow-primary/40 transform scale-[1.02] relative z-10 transition-all">
-                        <div class="col-span-4 flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-full border-2 border-white/30 p-0.5">
-                                <img src="https://ui-avatars.com/api/?name=Sarah+Amalia&background=fff&color=0466c8" class="w-full h-full rounded-full object-cover">
+                    <?php foreach ($anggota_list as $anggota): ?>
+                        <?php
+                            $nama = $anggota['nama'] ?? '';
+                            $username = $anggota['username'] ?? '';
+                            $npm = $anggota['npm'] ?? '';
+                            $foto = $anggota['foto'] ?? '';
+                            $jabatan = $anggota['jabatan'] ?? ''; // optional column
+                            $avatar = $foto ? e($foto) : 'https://ui-avatars.com/api/?name=' . urlencode($nama) . '&background=random';
+                        ?>
+                        <div class="group bg-white rounded-[20px] p-4 grid grid-cols-12 gap-4 items-center shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20">
+                            <div class="col-span-4 flex items-center gap-4">
+                                <img src="<?php echo $avatar; ?>" class="w-12 h-12 rounded-full object-cover" onerror="this.src='https://ui-avatars.com/api/?name=' + encodeURIComponent('<?php echo e($nama); ?>')">
+                                <div>
+                                    <h3 class="font-bold text-dark text-sm group-hover:text-primary transition"><?php echo e($nama); ?></h3>
+                                    <p class="text-xs text-muted">@<?php echo e($username); ?></p>
+                                </div>
                             </div>
-                            <div>
-                                <h3 class="font-bold text-white text-base">Sarah Amalia</h3>
-                                <p class="text-blue-100 text-xs">@sarahamalia</p>
+                            <div class="col-span-2 font-bold text-dark text-sm"><?php echo e($npm); ?></div>
+                            <div class="col-span-3 text-sm text-dark font-medium"><?php echo e($anggota['departemen'] ?? ''); ?> <span class="text-muted text-xs"><?php echo isset($anggota['divisi']) ? '• ' . e($anggota['divisi']) : ''; ?></span></div>
+                            <div class="col-span-2">
+                                <span class="bg-blue-50 text-primary px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1">
+                                    <?php echo e($jabatan ?: 'Anggota'); ?>
+                                </span>
                             </div>
-                        </div>
-                        <div class="col-span-2 font-bold text-white text-sm">14118120</div>
-                        <div class="col-span-3 text-sm text-white font-medium">PSDM <span class="opacity-80 text-xs">• Kaderisasi</span></div>
-                        <div class="col-span-2">
-                            <span class="bg-white/20 text-white border border-white/20 px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 backdrop-blur-sm">
-                                <i class="fa-solid fa-star text-[10px]"></i> Sekretaris
-                            </span>
-                        </div>
-                        <div class="col-span-1 text-right flex justify-end gap-2">
-                            <button class="bg-white/20 hover:bg-white hover:text-primary text-white w-8 h-8 rounded-lg flex items-center justify-center transition backdrop-blur-md"><i class="fa-solid fa-pen text-xs"></i></button>
-                            <button class="bg-white/20 hover:bg-red-500 text-white w-8 h-8 rounded-lg flex items-center justify-center transition backdrop-blur-md"><i class="fa-solid fa-trash text-xs"></i></button>
-                        </div>
-                    </div>
-
-                    <div class="group bg-white rounded-[20px] p-4 grid grid-cols-12 gap-4 items-center shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20">
-                        <div class="col-span-4 flex items-center gap-4">
-                            <img src="https://ui-avatars.com/api/?name=Dimas+Anggara&background=random" class="w-12 h-12 rounded-full object-cover">
-                            <div>
-                                <h3 class="font-bold text-dark text-sm group-hover:text-primary transition">Dimas Anggara</h3>
-                                <p class="text-xs text-muted">@dimas_anggara</p>
+                            <div class="col-span-1 text-right">
+                                <button class="text-muted hover:text-primary p-2 text-lg"><i class="fa-solid fa-ellipsis-vertical"></i></button>
                             </div>
                         </div>
-                        <div class="col-span-2 font-bold text-dark text-sm">14119001</div>
-                        <div class="col-span-3 text-sm text-dark font-medium">Hubungan Luar</div>
-                        <div class="col-span-2">
-                            <span class="bg-gray-100 text-gray-500 px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1">
-                                Staff Muda
-                            </span>
-                        </div>
-                        <div class="col-span-1 text-right">
-                            <button class="text-muted hover:text-primary p-2 text-lg"><i class="fa-solid fa-ellipsis-vertical"></i></button>
-                        </div>
-                    </div>
-
-                    <div class="group bg-white rounded-[20px] p-4 grid grid-cols-12 gap-4 items-center shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20">
-                        <div class="col-span-4 flex items-center gap-4">
-                            <img src="https://ui-avatars.com/api/?name=Linda+Kusuma&background=random" class="w-12 h-12 rounded-full object-cover">
-                            <div>
-                                <h3 class="font-bold text-dark text-sm group-hover:text-primary transition">Linda Kusuma</h3>
-                                <p class="text-xs text-muted">@lindakusuma</p>
-                            </div>
-                        </div>
-                        <div class="col-span-2 font-bold text-dark text-sm">14119055</div>
-                        <div class="col-span-3 text-sm text-dark font-medium">Logistik</div>
-                        <div class="col-span-2">
-                            <span class="bg-blue-50 text-primary px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1">
-                                Anggota
-                            </span>
-                        </div>
-                        <div class="col-span-1 text-right">
-                            <button class="text-muted hover:text-primary p-2 text-lg"><i class="fa-solid fa-ellipsis-vertical"></i></button>
-                        </div>
-                    </div>
+                    <?php endforeach; ?>
                 </div>
             </div>
 
             <div class="flex justify-between items-center mt-8 text-sm px-2">
-                <span class="text-muted font-medium">Menampilkan 4 dari 120 data</span>
+                <span class="text-muted font-medium">Menampilkan <?php echo e(min(10, $total)); ?> dari <?php echo e($total); ?> data</span>
                 <div class="bg-white p-1 rounded-xl shadow-card flex items-center gap-1">
                     <button class="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:bg-blue-50 hover:text-primary transition"><i class="fa-solid fa-chevron-left"></i></button>
                     <button class="w-8 h-8 rounded-lg flex items-center justify-center bg-primary text-white font-bold shadow-md shadow-primary/20">1</button>

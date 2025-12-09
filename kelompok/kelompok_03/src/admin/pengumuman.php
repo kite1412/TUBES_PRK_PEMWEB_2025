@@ -1,3 +1,36 @@
+<?php
+require_once __DIR__ . '/../config/db.php';
+
+try {
+    $rows = db_fetch_all(
+        'SELECT p.*, dep.nama AS departemen_nama, dv.nama AS divisi_nama FROM pengumuman p LEFT JOIN departemen dep ON p.departemen_id = dep.id LEFT JOIN divisi dv ON p.divisi_id = dv.id ORDER BY p.tanggal DESC'
+    );
+
+    $totalPengumuman = count($rows);
+    $infoPenting = 0; // target != 'semua'
+    $baru24 = 0;
+    $now = new DateTime();
+    foreach ($rows as $r) {
+        if ($r['target'] !== 'semua') $infoPenting++;
+        $t = new DateTime($r['tanggal']);
+        $interval = $now->getTimestamp() - $t->getTimestamp();
+        if ($interval <= 24 * 3600) $baru24++;
+    }
+
+    // For modal selects
+    $departemenList = db_fetch_all('SELECT id, nama FROM departemen ORDER BY nama ASC');
+    $divisiList = db_fetch_all('SELECT id, nama FROM divisi ORDER BY nama ASC');
+
+} catch (Exception $e) {
+    $error = $e->getMessage();
+    $rows = [];
+    $totalPengumuman = 0;
+    $infoPenting = 0;
+    $baru24 = 0;
+    $departemenList = [];
+    $divisiList = [];
+}
+?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -46,22 +79,22 @@
         </div>
 
         <nav class="flex-1 space-y-2">
-            <a href="index.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
+            <a href="anggota.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
                 <i class="fa-solid fa-users w-5 text-center"></i><span>Anggota</span>
             </a>
-            <a href="departemen.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
+            <a href="departemen.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
                 <i class="fa-solid fa-sitemap w-5 text-center"></i><span>Departemen</span>
             </a>
-            <a href="divisi.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
+            <a href="divisi.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
                 <i class="fa-solid fa-network-wired w-5 text-center"></i><span>Divisi</span>
             </a>
-            <a href="kegiatan.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
+            <a href="kegiatan.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
                 <i class="fa-regular fa-calendar-check w-5 text-center"></i><span>Kegiatan</span>
             </a>
-            <a href="berita.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
+            <a href="berita.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
                 <i class="fa-regular fa-newspaper w-5 text-center"></i><span>Berita</span>
             </a>
-            <a href="pengumuman.html" class="flex items-center gap-4 px-4 py-4 bg-primary text-white rounded-2xl shadow-lg shadow-primary/30 font-bold hover:scale-105 transition-transform">
+            <a href="pengumuman.php" class="flex items-center gap-4 px-4 py-4 bg-primary text-white rounded-2xl shadow-lg shadow-primary/30 font-bold hover:scale-105 transition-transform">
                 <i class="fa-solid fa-bullhorn w-5 text-center"></i><span>Pengumuman</span>
             </a>
         </nav>
@@ -95,7 +128,7 @@
                 <div class="bg-white p-5 rounded-[20px] shadow-card border-l-4 border-primary flex items-center justify-between">
                     <div>
                         <p class="text-sm text-muted font-medium">Total Broadcast</p>
-                        <h2 class="text-2xl font-bold text-dark" id="totalPengumuman">8</h2>
+                        <h2 class="text-2xl font-bold text-dark" id="totalPengumuman"><?= htmlspecialchars($totalPengumuman) ?></h2>
                         <p class="text-xs text-muted mt-1">Aktif saat ini</p>
                     </div>
                     <div class="w-12 h-12 bg-blue-50 text-primary rounded-xl flex items-center justify-center text-xl"><i class="fa-solid fa-bullhorn"></i></div>
@@ -103,7 +136,7 @@
                 <div class="bg-white p-5 rounded-[20px] shadow-card border-l-4 border-red-500 flex items-center justify-between">
                     <div>
                         <p class="text-sm text-muted font-medium">Info Penting</p>
-                        <h2 class="text-2xl font-bold text-dark">2</h2>
+                        <h2 class="text-2xl font-bold text-dark"><?= htmlspecialchars($infoPenting) ?></h2>
                         <p class="text-xs text-red-500 font-bold mt-1">Wajib dibaca</p>
                     </div>
                     <div class="w-12 h-12 bg-red-50 text-red-600 rounded-xl flex items-center justify-center text-xl"><i class="fa-solid fa-triangle-exclamation"></i></div>
@@ -111,7 +144,7 @@
                 <div class="bg-white p-5 rounded-[20px] shadow-card border-l-4 border-green-500 flex items-center justify-between">
                     <div>
                         <p class="text-sm text-muted font-medium">Baru (24 Jam)</p>
-                        <h2 class="text-2xl font-bold text-dark">3</h2>
+                        <h2 class="text-2xl font-bold text-dark"><?= htmlspecialchars($baru24) ?></h2>
                         <p class="text-xs text-muted mt-1">Update terbaru</p>
                     </div>
                     <div class="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center text-xl"><i class="fa-solid fa-clock"></i></div>
@@ -138,44 +171,58 @@
             </div>
 
             <div class="w-full grid grid-cols-1 gap-6" id="pengumumanList">
-                
-                <div class="bg-white rounded-[20px] p-6 shadow-card border-l-8 border-red-500 flex flex-col gap-3 relative hover:shadow-soft transition-all group" id="p-1">
+                <?php if (!empty($error)): ?>
+                    <div class="text-red-600 p-4 bg-white rounded-lg shadow-card"><?= htmlspecialchars($error) ?></div>
+                <?php endif; ?>
+
+                <?php foreach ($rows as $r):
+                    $tanggal = new DateTime($r['tanggal']);
+                    $now = new DateTime();
+                    $diff = $now->diff($tanggal);
+                    if ($diff->d > 0) {
+                        $ago = $diff->d . ' Hari yang lalu';
+                    } elseif ($diff->h > 0) {
+                        $ago = $diff->h . ' Jam yang lalu';
+                    } elseif ($diff->i > 0) {
+                        $ago = $diff->i . ' Menit yang lalu';
+                    } else {
+                        $ago = 'Baru saja';
+                    }
+
+                    // target label and class
+                    if ($r['target'] === 'semua') {
+                        $targetLabel = 'Semua Anggota';
+                        $labelClass = 'bg-gray-100 text-dark';
+                    } elseif ($r['target'] === 'departemen') {
+                        $targetLabel = 'Dept. ' . ($r['departemen_nama'] ?? '—');
+                        $labelClass = 'bg-blue-50 text-blue-700';
+                    } else {
+                        $targetLabel = 'Divisi ' . ($r['divisi_nama'] ?? '—');
+                        $labelClass = 'bg-purple-50 text-purple-700';
+                    }
+                ?>
+                <div class="bg-white rounded-[20px] p-6 shadow-card border-l-8 <?= ($r['target'] === 'departemen') ? 'border-blue-400' : (($r['target'] === 'divisi') ? 'border-green-500' : 'border-red-500') ?> flex flex-col gap-3 relative hover:shadow-soft transition-all group" id="p-<?= htmlspecialchars($r['id']) ?>">
                     <div class="flex justify-between items-start">
                         <div class="flex items-center gap-3">
-                            <span class="bg-red-100 text-red-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide flex items-center gap-1"><i class="fa-solid fa-triangle-exclamation"></i> Penting</span>
-                            <span class="text-xs text-muted">Target: <strong class="text-dark bg-gray-100 px-2 py-0.5 rounded">Semua Anggota</strong></span>
+                            <span class="<?= ($r['target'] === 'semua') ? 'bg-gray-100 text-dark' : (($r['target'] === 'departemen') ? 'bg-blue-50 text-blue-600' : 'bg-green-100 text-green-600') ?> text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide flex items-center gap-1">
+                                <i class="fa-solid <?= ($r['target'] === 'departemen') ? 'fa-circle-info' : (($r['target'] === 'divisi') ? 'fa-check' : 'fa-bullhorn') ?>"></i>
+                                <?= ($r['target'] === 'semua') ? 'Umum' : ($r['target'] === 'departemen' ? 'Info' : 'Baru') ?>
+                            </span>
+                            <span class="text-xs text-muted">Target: <strong class="text-dark <?= $labelClass ?> px-2 py-0.5 rounded"><?= htmlspecialchars($targetLabel) ?></strong></span>
                         </div>
-                        <span class="text-xs text-muted flex items-center gap-1"><i class="fa-regular fa-clock"></i> 2 Jam yang lalu</span>
+                        <span class="text-xs text-muted flex items-center gap-1"><i class="fa-regular fa-clock"></i> <?= htmlspecialchars($ago) ?></span>
                     </div>
                     
                     <div>
-                        <h3 class="text-lg font-bold text-dark group-hover:text-primary transition">Rapat Umum Anggota Triwulan 1</h3>
-                        <p class="text-sm text-muted mt-2 leading-relaxed">Diharapkan seluruh anggota untuk hadir di Aula Utama pada hari Senin untuk evaluasi program kerja. Absensi wajib menggunakan KTM.</p>
+                        <h3 class="text-lg font-bold text-dark group-hover:text-primary transition"><?= htmlspecialchars($r['judul']) ?></h3>
+                        <p class="text-sm text-muted mt-2 leading-relaxed"><?= nl2br(htmlspecialchars($r['konten'])) ?></p>
                     </div>
 
                     <div class="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition">
-                        <button onclick="deleteItem('p-1')" class="text-muted hover:text-red-500 p-2 bg-gray-50 rounded-lg"><i class="fa-solid fa-trash"></i></button>
+                        <button onclick="deleteItem('p-<?= htmlspecialchars($r['id']) ?>')" class="text-muted hover:text-red-500 p-2 bg-gray-50 rounded-lg"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 </div>
-
-                <div class="bg-white rounded-[20px] p-6 shadow-card border-l-8 border-blue-400 flex flex-col gap-3 relative hover:shadow-soft transition-all group" id="p-2">
-                    <div class="flex justify-between items-start">
-                        <div class="flex items-center gap-3">
-                            <span class="bg-blue-50 text-blue-600 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide flex items-center gap-1"><i class="fa-solid fa-circle-info"></i> Info</span>
-                            <span class="text-xs text-muted">Target: <strong class="text-dark bg-blue-50 text-blue-700 px-2 py-0.5 rounded">Dept. Kominfo</strong></span>
-                        </div>
-                        <span class="text-xs text-muted flex items-center gap-1"><i class="fa-regular fa-clock"></i> 1 Hari yang lalu</span>
-                    </div>
-                    
-                    <div>
-                        <h3 class="text-lg font-bold text-dark group-hover:text-primary transition">Deadline Pengumpulan Konten IG</h3>
-                        <p class="text-sm text-muted mt-2 leading-relaxed">Mengingatkan kembali untuk tim konten agar submit draft sebelum hari Jumat pukul 15.00 WIB di Google Drive divisi.</p>
-                    </div>
-
-                    <div class="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition">
-                        <button onclick="deleteItem('p-2')" class="text-muted hover:text-red-500 p-2 bg-gray-50 rounded-lg"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                </div>
+                <?php endforeach; ?>
 
             </div>
         </div>
@@ -206,18 +253,18 @@
                 <div id="wrapperDept" class="hidden slide-down">
                     <label class="block text-xs font-bold text-dark uppercase mb-1">Pilih Departemen</label>
                     <select id="selectDept" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary bg-white cursor-pointer">
-                        <option value="Kominfo">Kominfo</option>
-                        <option value="PSDM">PSDM</option>
-                        <option value="Hublu">Hubungan Luar</option>
+                        <?php foreach ($departemenList as $d): ?>
+                            <option value="<?= htmlspecialchars($d['id']) ?>"><?= htmlspecialchars($d['nama']) ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
 
                 <div id="wrapperDivisi" class="hidden slide-down">
                     <label class="block text-xs font-bold text-dark uppercase mb-1">Pilih Divisi</label>
                     <select id="selectDivisi" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary bg-white cursor-pointer">
-                        <option value="Multimedia">Multimedia (Kominfo)</option>
-                        <option value="Kaderisasi">Kaderisasi (PSDM)</option>
-                        <option value="Sponsorship">Sponsorship (Hublu)</option>
+                        <?php foreach ($divisiList as $dv): ?>
+                            <option value="<?= htmlspecialchars($dv['id']) ?>"><?= htmlspecialchars($dv['nama']) ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
 
@@ -236,7 +283,6 @@
     </div>
 
     <script>
-        // Modal & Logic Target
         function toggleModal(show) {
             const modal = document.getElementById('modalPengumuman');
             if (show) {
@@ -253,21 +299,17 @@
             const wrapDept = document.getElementById('wrapperDept');
             const wrapDiv = document.getElementById('wrapperDivisi');
 
-            // Reset
             wrapDept.classList.add('hidden');
             wrapDiv.classList.add('hidden');
 
-            if (target === 'departemen') {
-                wrapDept.classList.remove('hidden');
-            } else if (target === 'divisi') {
-                wrapDiv.classList.remove('hidden');
-            }
+            if (target === 'departemen') wrapDept.classList.remove('hidden');
+            if (target === 'divisi') wrapDiv.classList.remove('hidden');
         }
 
-        // CRUD Logic
         function deleteItem(id) {
             if(confirm("Hapus pengumuman ini?")) {
                 const item = document.getElementById(id);
+                if (!item) return;
                 item.style.opacity = '0';
                 item.style.transform = 'scale(0.95)';
                 setTimeout(() => item.remove(), 300);
@@ -278,21 +320,19 @@
             const judul = document.getElementById('inputJudul').value;
             const konten = document.getElementById('inputKonten').value;
             const targetType = document.getElementById('inputTarget').value;
-            
             if(!judul || !konten) { alert("Judul dan Konten wajib diisi!"); return; }
 
-            // Tentukan Label Target
             let targetLabel = "Semua Anggota";
-            let labelClass = "bg-gray-100 text-dark"; // Default
-            
-            if(targetType === 'departemen') {
-                const dept = document.getElementById('selectDept').value;
-                targetLabel = "Dept. " + dept;
-                labelClass = "bg-blue-50 text-blue-700";
-            } else if(targetType === 'divisi') {
-                const div = document.getElementById('selectDivisi').value;
-                targetLabel = "Divisi " + div;
-                labelClass = "bg-purple-50 text-purple-700";
+            let labelClass = "bg-gray-100 text-dark";
+
+            if (targetType === 'departemen') {
+                const deptText = document.getElementById('selectDept').selectedOptions[0].text;
+                targetLabel = 'Dept. ' + deptText;
+                labelClass = 'bg-blue-50 text-blue-700';
+            } else if (targetType === 'divisi') {
+                const divText = document.getElementById('selectDivisi').selectedOptions[0].text;
+                targetLabel = 'Divisi ' + divText;
+                labelClass = 'bg-purple-50 text-purple-700';
             }
 
             const newId = 'p-' + Date.now();
@@ -306,12 +346,10 @@
                     </div>
                     <span class="text-xs text-muted flex items-center gap-1"><i class="fa-regular fa-clock"></i> Baru saja</span>
                 </div>
-                
                 <div>
                     <h3 class="text-lg font-bold text-dark group-hover:text-primary transition">${judul}</h3>
                     <p class="text-sm text-muted mt-2 leading-relaxed">${konten}</p>
                 </div>
-
                 <div class="absolute top-6 right-6 flex gap-2 opacity-0 group-hover:opacity-100 transition">
                     <button onclick="deleteItem('${newId}')" class="text-muted hover:text-red-500 p-2 bg-gray-50 rounded-lg"><i class="fa-solid fa-trash"></i></button>
                 </div>
@@ -320,13 +358,11 @@
             const container = document.getElementById('pengumumanList');
             container.insertAdjacentHTML('afterbegin', newItem);
 
-            // Update Stat
             const totalEl = document.getElementById('totalPengumuman');
             totalEl.innerText = parseInt(totalEl.innerText) + 1;
 
-            // Reset & Close
             document.getElementById('formPengumuman').reset();
-            handleTargetChange(); // Reset hidden fields
+            handleTargetChange();
             toggleModal(false);
         }
     </script>

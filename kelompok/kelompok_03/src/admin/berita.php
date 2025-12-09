@@ -1,3 +1,18 @@
+<?php
+require_once __DIR__ . '/../config/db.php';
+
+function e($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+
+$error = null;
+$berita_list = [];
+try {
+    $berita_list = db_fetch_all('SELECT * FROM berita ORDER BY created_at DESC');
+    $total = count($berita_list);
+} catch (Exception $ex) {
+    $error = $ex->getMessage();
+    $total = 0;
+}
+?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -47,12 +62,12 @@
         </div>
 
         <nav class="flex-1 space-y-2">
-            <a href="index.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-users w-5 text-center"></i><span>Anggota</span></a>
-            <a href="departemen.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-sitemap w-5 text-center"></i><span>Departemen</span></a>
-            <a href="divisi.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-network-wired w-5 text-center"></i><span>Divisi</span></a>
-            <a href="kegiatan.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-regular fa-calendar-check w-5 text-center"></i><span>Kegiatan</span></a>
-            <a href="berita.html" class="flex items-center gap-4 px-4 py-4 bg-primary text-white rounded-2xl shadow-lg shadow-primary/30 font-bold hover:scale-105 transition-transform"><i class="fa-regular fa-newspaper w-5 text-center"></i><span>Berita</span></a>
-            <a href="pengumuman.html" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-bullhorn w-5 text-center"></i><span>Pengumuman</span></a>
+            <a href="anggota.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-users w-5 text-center"></i><span>Anggota</span></a>
+            <a href="departemen.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-sitemap w-5 text-center"></i><span>Departemen</span></a>
+            <a href="divisi.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-network-wired w-5 text-center"></i><span>Divisi</span></a>
+            <a href="kegiatan.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-regular fa-calendar-check w-5 text-center"></i><span>Kegiatan</span></a>
+            <a href="berita.php" class="flex items-center gap-4 px-4 py-4 bg-primary text-white rounded-2xl shadow-lg shadow-primary/30 font-bold hover:scale-105 transition-transform"><i class="fa-regular fa-newspaper w-5 text-center"></i><span>Berita</span></a>
+            <a href="pengumuman.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-bullhorn w-5 text-center"></i><span>Pengumuman</span></a>
         </nav>
 
         <div class="mt-auto flex items-center gap-3 p-3 rounded-2xl border border-gray-100 bg-gray-50/50">
@@ -88,7 +103,7 @@
                 <div class="bg-white p-5 rounded-[20px] shadow-card border-l-4 border-primary flex items-center justify-between">
                     <div>
                         <p class="text-sm text-muted font-medium">Total Artikel</p>
-                        <h2 class="text-2xl font-bold text-dark" id="totalBerita">24</h2>
+                        <h2 class="text-2xl font-bold text-dark" id="totalBerita"><?php echo e($total); ?></h2>
                         <p class="text-xs text-muted mt-1">Dipublikasikan</p>
                     </div>
                     <div class="w-12 h-12 bg-blue-50 text-primary rounded-xl flex items-center justify-center text-xl"><i class="fa-solid fa-newspaper"></i></div>
@@ -127,48 +142,41 @@
             </div>
 
             <div class="w-full space-y-4" id="beritaList">
-                
-                <div class="group bg-white rounded-[20px] p-4 flex gap-6 shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20 animate-fade-in" id="berita-1">
-                    <div class="w-48 h-32 bg-gray-200 rounded-xl overflow-hidden flex-shrink-0 relative">
-                        <img src="https://source.unsplash.com/random/400x300/?technology" class="w-full h-full object-cover group-hover:scale-110 transition duration-500">
-                    </div>
-                    
-                    <div class="flex-1 flex flex-col justify-center min-w-0">
-                        <div class="flex items-center gap-3 text-xs text-muted mb-2">
-                            <span class="flex items-center gap-1"><i class="fa-regular fa-calendar"></i> 06 Des 2025</span>
-                            <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
-                            <span class="flex items-center gap-1"><i class="fa-solid fa-user-pen"></i> Admin</span>
+                <?php if ($error): ?>
+                    <div class="p-4 bg-red-50 text-red-700 rounded">Error: <?php echo e($error); ?></div>
+                <?php endif; ?>
+
+                <?php foreach ($berita_list as $row): ?>
+                    <?php
+                        $id = $row['id'];
+                        $judul = $row['judul'] ?? '';
+                        $isi = $row['isi'] ?? '';
+                        $thumb = $row['thumbnail'] ?? '';
+                        $created = isset($row['created_at']) && $row['created_at'] ? date('d M Y', strtotime($row['created_at'])) : '';
+                        $snippet = mb_substr(strip_tags($isi), 0, 160) . (mb_strlen(strip_tags($isi)) > 160 ? '...' : '');
+                        $img = $thumb ? e($thumb) : 'https://source.unsplash.com/random/400x300/?news';
+                    ?>
+                    <div class="group bg-white rounded-[20px] p-4 flex gap-6 shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20 animate-fade-in" id="berita-<?php echo e($id); ?>">
+                        <div class="w-48 h-32 bg-gray-200 rounded-xl overflow-hidden flex-shrink-0 relative">
+                            <img src="<?php echo $img; ?>" class="w-full h-full object-cover group-hover:scale-110 transition duration-500">
                         </div>
-                        <h3 class="font-bold text-dark text-lg mb-2 group-hover:text-primary transition line-clamp-1">Transformasi Digital Organisasi Kampus</h3>
-                        <p class="text-muted text-sm line-clamp-2 leading-relaxed">Penerapan sistem informasi baru NexOrg diharapkan dapat meningkatkan efisiensi administrasi hingga 80%...</p>
-                    </div>
-
-                    <div class="flex flex-col justify-center gap-2 border-l border-gray-100 pl-4">
-                         <button onclick="editItem('Transformasi Digital')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-primary hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
-                        <button onclick="deleteItem('berita-1')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-red-500 hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                </div>
-
-                <div class="group bg-white rounded-[20px] p-4 flex gap-6 shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20 animate-fade-in" id="berita-2">
-                    <div class="w-48 h-32 bg-gray-200 rounded-xl overflow-hidden flex-shrink-0 relative">
-                        <img src="https://source.unsplash.com/random/400x300/?achievement" class="w-full h-full object-cover group-hover:scale-110 transition duration-500">
-                    </div>
-                    
-                    <div class="flex-1 flex flex-col justify-center min-w-0">
-                        <div class="flex items-center gap-3 text-xs text-muted mb-2">
-                            <span class="flex items-center gap-1"><i class="fa-regular fa-calendar"></i> 05 Des 2025</span>
-                            <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
-                            <span class="flex items-center gap-1"><i class="fa-solid fa-user-pen"></i> Admin</span>
+                        
+                        <div class="flex-1 flex flex-col justify-center min-w-0">
+                            <div class="flex items-center gap-3 text-xs text-muted mb-2">
+                                <span class="flex items-center gap-1"><i class="fa-regular fa-calendar"></i> <?php echo e($created); ?></span>
+                                <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
+                                <span class="flex items-center gap-1"><i class="fa-solid fa-user-pen"></i> Admin</span>
+                            </div>
+                            <h3 class="font-bold text-dark text-lg mb-2 group-hover:text-primary transition line-clamp-1"><?php echo e($judul); ?></h3>
+                            <p class="text-muted text-sm line-clamp-2 leading-relaxed"><?php echo e($snippet); ?></p>
                         </div>
-                        <h3 class="font-bold text-dark text-lg mb-2 group-hover:text-primary transition line-clamp-1">Prestasi Gemilang di Kompetisi Nasional</h3>
-                        <p class="text-muted text-sm line-clamp-2 leading-relaxed">Tim delegasi organisasi berhasil membawa pulang medali emas dalam ajang Pekan Ilmiah Mahasiswa Nasional...</p>
-                    </div>
 
-                    <div class="flex flex-col justify-center gap-2 border-l border-gray-100 pl-4">
-                         <button onclick="editItem('Prestasi Gemilang')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-primary hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
-                        <button onclick="deleteItem('berita-2')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-red-500 hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-trash"></i></button>
+                        <div class="flex flex-col justify-center gap-2 border-l border-gray-100 pl-4">
+                            <button onclick="editItem('<?php echo e(addslashes($judul)); ?>')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-primary hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteItem('berita-<?php echo e($id); ?>')" class="w-10 h-10 rounded-xl bg-gray-50 text-muted hover:bg-red-500 hover:text-white transition flex items-center justify-center"><i class="fa-solid fa-trash"></i></button>
+                        </div>
                     </div>
-                </div>
+                <?php endforeach; ?>
 
             </div>
         </div>
@@ -224,6 +232,7 @@
         function deleteItem(id) {
             if(confirm("Hapus berita ini dari database?")) {
                 const item = document.getElementById(id);
+                if (!item) return;
                 item.style.opacity = '0';
                 item.style.transform = 'scale(0.9)';
                 setTimeout(() => item.remove(), 300);
