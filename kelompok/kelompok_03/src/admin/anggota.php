@@ -228,12 +228,8 @@ try {
 
             <div class="bg-white p-2 pl-6 pr-2 rounded-full shadow-card flex items-center gap-4 w-[400px]">
                 <i class="fa-solid fa-magnifying-glass text-muted"></i>
-                <input type="text" placeholder="Cari nama, NPM, atau jabatan..." class="bg-transparent flex-1 outline-none text-sm text-dark placeholder:text-muted/70">
+                <input id="searchAnggota" type="text" placeholder="Cari anggota berdasarkan nama..." class="bg-transparent flex-1 outline-none text-sm text-dark placeholder:text-muted/70">
                 <div class="h-8 w-[1px] bg-gray-100"></div>
-                <button class="w-10 h-10 rounded-full flex items-center justify-center text-muted hover:text-primary hover:bg-blue-50 transition relative">
-                    <span class="absolute top-2 right-3 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-                    <i class="fa-regular fa-bell text-xl"></i>
-                </button>
             </div>
         </header>
 
@@ -492,6 +488,46 @@ try {
         })();
     </script>
     <script>
+        // Search-by-name filter for anggota list
+        (function(){
+            const searchInput = document.getElementById('searchAnggota');
+            if (!searchInput) return;
+
+            function updateCount(visible){
+                const labelEl = document.getElementById('listCountLabel');
+                if (!labelEl) return;
+                const total = parseInt(labelEl.getAttribute('data-total') || '0', 10) || 0;
+                labelEl.textContent = 'Menampilkan ' + visible + ' dari ' + total + ' data';
+            }
+
+            searchInput.addEventListener('input', function(){
+                const q = (this.value || '').trim().toLowerCase();
+                // try to read current departemen filter id from the label (if any)
+                let depFilterId = '';
+                const depLabel = document.getElementById('departemenButtonLabel');
+                const depPanel = document.getElementById('departemenPanel');
+                if (depLabel && depPanel) {
+                    const name = depLabel.textContent.trim();
+                    if (name && name !== 'Semua Departemen'){
+                        // find button with matching name to get id
+                        const btn = Array.from(depPanel.querySelectorAll('button[data-dep-name]')).find(b => (b.getAttribute('data-dep-name')||'').trim() === name);
+                        if (btn) depFilterId = btn.getAttribute('data-dep-id') || '';
+                    }
+                }
+
+                const rows = Array.from(document.querySelectorAll('[data-id]'));
+                let visible = 0;
+                rows.forEach(r => {
+                    const name = (r.getAttribute('data-nama') || '').toLowerCase();
+                    const rowDep = (r.getAttribute('data-departemen') || '').trim();
+                    const matchName = q === '' ? true : name.indexOf(q) !== -1;
+                    const matchDep = depFilterId ? (String(rowDep) === String(depFilterId)) : true;
+                    if (matchName && matchDep) { r.style.display = ''; visible++; } else { r.style.display = 'none'; }
+                });
+
+                updateCount(visible);
+            });
+        })();
         // helper to open modal for creating a new anggota
         function openCreateModal() {
             const form = document.getElementById('formTambahAnggota');
@@ -659,22 +695,6 @@ try {
             }
 
             departemenSelect.addEventListener('change', filterDivisi);
-            // when a divisi is selected, auto-select its parent departemen
-            divisiSelect.addEventListener('change', function(){
-                const selectedDiv = this.value || '';
-                if (!selectedDiv) return;
-                // find option element for selected divisi
-                const opt = Array.from(this.options).find(o => o.value === selectedDiv);
-                if (!opt) return;
-                const optDep = opt.getAttribute('data-departemen') || '';
-                if (optDep) {
-                    departemenSelect.value = optDep;
-                    // re-apply filter so divisi options for that departemen are visible
-                    filterDivisi();
-                    // ensure the previously selected divisi remains selected
-                    this.value = selectedDiv;
-                }
-            });
             // run once on load to apply initial filtering
             filterDivisi();
         })();

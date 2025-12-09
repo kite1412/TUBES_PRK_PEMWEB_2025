@@ -170,6 +170,42 @@ try {
             }
         }
     </script>
+    <script>
+        // Client-side search filter for berita by judul (case-insensitive)
+        (function(){
+            function initBeritaSearch(){
+                const inp = document.getElementById('searchBerita');
+                const listRoot = document.getElementById('beritaList');
+                if (!inp || !listRoot) return;
+                function applyFilter() {
+                    const q = (inp.value || '').trim().toLowerCase();
+                    const items = Array.from(listRoot.querySelectorAll('div[id^="berita-"]'));
+                    let visible = 0;
+                    items.forEach(it => {
+                        const title = (it.getAttribute('data-judul') || '').toLowerCase();
+                        if (q === '' || title.indexOf(q) !== -1) {
+                            it.style.display = '';
+                            visible++;
+                        } else {
+                            it.style.display = 'none';
+                        }
+                    });
+                    const totalEl = document.getElementById('totalBerita');
+                    if (totalEl) {
+                        if (q === '') {
+                            totalEl.textContent = '<?php echo e($total); ?>';
+                        } else {
+                            totalEl.textContent = String(visible);
+                        }
+                    }
+                }
+                inp.addEventListener('input', applyFilter);
+                // run once to initialize
+                applyFilter();
+            }
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initBeritaSearch); else initBeritaSearch();
+        })();
+    </script>
     <style>
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .modal { transition: opacity 0.3s ease, visibility 0.3s ease; }
@@ -217,12 +253,8 @@ try {
             
             <div class="bg-white p-2 pl-6 pr-2 rounded-full shadow-card flex items-center gap-4 w-[400px]">
                 <i class="fa-solid fa-magnifying-glass text-muted"></i>
-                <input type="text" placeholder="Cari berita..." class="bg-transparent flex-1 outline-none text-sm text-dark placeholder:text-muted/70">
+                <input id="searchBerita" type="text" placeholder="Cari berita..." class="bg-transparent flex-1 outline-none text-sm text-dark placeholder:text-muted/70">
                 <div class="h-8 w-[1px] bg-gray-100"></div>
-                <button class="w-10 h-10 rounded-full flex items-center justify-center text-muted hover:text-primary hover:bg-blue-50 transition relative">
-                    <span class="absolute top-2 right-3 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-                    <i class="fa-regular fa-bell text-xl"></i>
-                </button>
             </div>
         </header>
 

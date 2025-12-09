@@ -197,16 +197,6 @@ try {
                 <p class="text-muted text-sm font-medium">Dashboard Admin</p>
                 <h1 class="text-3xl font-bold text-dark mt-1">Manajemen Departemen</h1>
             </div>
-
-            <div class="bg-white p-2 pl-6 pr-2 rounded-full shadow-card flex items-center gap-4 w-[400px]">
-                <i class="fa-solid fa-magnifying-glass text-muted"></i>
-                <input type="text" placeholder="Cari departemen..." class="bg-transparent flex-1 outline-none text-sm text-dark placeholder:text-muted/70">
-                <div class="h-8 w-[1px] bg-gray-100"></div>
-                <button class="w-10 h-10 rounded-full flex items-center justify-center text-muted hover:text-primary hover:bg-blue-50 transition relative">
-                    <span class="absolute top-2 right-3 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-                    <i class="fa-regular fa-bell text-xl"></i>
-                </button>
-            </div>
         </header>
 
         <div class="flex-1 overflow-y-auto px-10 pb-10 no-scrollbar">

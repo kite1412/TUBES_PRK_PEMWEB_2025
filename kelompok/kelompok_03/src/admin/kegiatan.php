@@ -153,10 +153,9 @@ try {
                 <h1 class="text-3xl font-bold text-dark mt-1">Daftar Kegiatan</h1>
             </div>
             
-            <div class="bg-white p-2 pl-6 pr-2 rounded-full shadow-card flex items-center gap-4 w-[400px]">
+            <div class="bg-white p-2 py-4 pl-6 pr-2 rounded-full shadow-card flex items-center gap-4 w-[400px]">
                 <i class="fa-solid fa-magnifying-glass text-muted"></i>
                 <input type="text" id="searchInput" placeholder="Cari kegiatan..." class="bg-transparent flex-1 outline-none text-sm text-dark placeholder:text-muted/70">
-                <button class="w-10 h-10 rounded-full flex items-center justify-center text-muted hover:text-primary bg-gray-50"><i class="fa-regular fa-bell"></i></button>
             </div>
         </header>
 
@@ -336,8 +335,9 @@ try {
             list.forEach(item => {
                 // skip the error box (which is a div without id starting with kegiatan-)
                 if (!item.id || !item.id.startsWith('kegiatan-')) return;
-                const judul = (item.querySelector('h3')?.textContent || '').toLowerCase();
-                const deskripsi = (item.querySelector('p')?.textContent || '').toLowerCase();
+                // prefer data attributes (stable) over DOM text which may be truncated
+                const judul = (item.getAttribute('data-judul') || '').toLowerCase();
+                const deskripsi = (item.getAttribute('data-deskripsi') || '').toLowerCase();
                 const tanggal = item.getAttribute('data-tanggal') || '';
                 let matchesQuery = true;
                 if (q !== '') {
