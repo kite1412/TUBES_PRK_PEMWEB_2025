@@ -1,4 +1,9 @@
 <?php
+session_start();
+if (!isset($_SESSION['user_id']) || (isset($_SESSION['role']) && $_SESSION['role'] !== 'admin') || !isset($_SESSION['role'])) {
+    header('Location: ../login/login.php');
+    exit;
+}
 require_once __DIR__ . '/../config/db.php';
 // Date helper (Bahasa Indonesia)
 require_once __DIR__ . '/../helpers/date_helper.php';
