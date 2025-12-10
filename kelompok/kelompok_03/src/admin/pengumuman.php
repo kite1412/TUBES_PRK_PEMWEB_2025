@@ -134,31 +134,16 @@ try {
 
     <aside class="w-72 bg-white h-full flex flex-col py-8 px-5 z-20 shadow-xl shadow-blue-900/5">
         <div class="flex items-center gap-3 px-4 mb-10">
-            <div class="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center text-xl shadow-lg shadow-primary/40">
-                <i class="fa-solid fa-layer-group"></i>
-            </div>
-            <div class="text-2xl font-bold text-dark tracking-tight">Tics<span class="text-primary">Org</span></div>
+            <div class="text-2xl font-bold text-dark tracking-tight">Organisasi<span class="text-primary"> Mahasiswa</span></div>
         </div>
 
         <nav class="flex-1 space-y-2">
-            <a href="anggota.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
-                <i class="fa-solid fa-users w-5 text-center"></i><span>Anggota</span>
-            </a>
-            <a href="departemen.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
-                <i class="fa-solid fa-sitemap w-5 text-center"></i><span>Departemen</span>
-            </a>
-            <a href="divisi.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
-                <i class="fa-solid fa-network-wired w-5 text-center"></i><span>Divisi</span>
-            </a>
-            <a href="kegiatan.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
-                <i class="fa-regular fa-calendar-check w-5 text-center"></i><span>Kegiatan</span>
-            </a>
-            <a href="berita.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium">
-                <i class="fa-regular fa-newspaper w-5 text-center"></i><span>Berita</span>
-            </a>
-            <a href="pengumuman.php" class="flex items-center gap-4 px-4 py-4 bg-primary text-white rounded-2xl shadow-lg shadow-primary/30 font-bold hover:scale-105 transition-transform">
-                <i class="fa-solid fa-bullhorn w-5 text-center"></i><span>Pengumuman</span>
-            </a>
+            <a href="anggota.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-users w-5 text-center"></i><span>Anggota</span></a>
+            <a href="departemen.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-sitemap w-5 text-center"></i><span>Departemen</span></a>
+            <a href="divisi.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-solid fa-network-wired w-5 text-center"></i><span>Divisi</span></a>
+            <a href="kegiatan.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-regular fa-calendar-check w-5 text-center"></i><span>Kegiatan</span></a>
+            <a href="berita.php" class="flex items-center gap-4 px-4 py-4 text-muted hover:text-primary hover:bg-blue-50 rounded-2xl transition-colors font-medium"><i class="fa-regular fa-newspaper w-5 text-center"></i><span>Berita</span></a>
+            <a href="pengumuman.php" class="flex items-center gap-4 px-4 py-4 bg-primary text-white rounded-2xl shadow-lg shadow-primary/30 font-bold hover:scale-105 transition-transform"><i class="fa-solid fa-bullhorn w-5 text-center"></i><span>Pengumuman</span></a>
         </nav>
 
         <div class="mt-auto flex items-center gap-3 p-3 rounded-2xl border border-gray-100 bg-gray-50/50">
@@ -167,10 +152,10 @@ try {
                 <p class="text-sm font-bold text-dark truncate">Admin Utama</p>
                 <p class="text-xs text-muted truncate">Super User</p>
             </div>
+        </div>
         <form method="POST" action="../login/logout.php" style="padding:12px">
             <button type="submit" class="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl font-semibold">Keluar</button>
         </form>
-        </div>
     </aside>
 
     <main class="flex-1 flex flex-col relative overflow-hidden">

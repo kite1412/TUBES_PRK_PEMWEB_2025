@@ -129,10 +129,7 @@ try {
 
     <aside class="w-72 bg-white h-full flex flex-col py-8 px-5 z-20 shadow-xl shadow-blue-900/5">
         <div class="flex items-center gap-3 px-4 mb-10">
-            <div class="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center text-xl shadow-lg shadow-primary/40">
-                <i class="fa-solid fa-layer-group"></i>
-            </div>
-            <div class="text-2xl font-bold text-dark tracking-tight">Tics<span class="text-primary">Org</span></div>
+            <div class="text-2xl font-bold text-dark tracking-tight">Organisasi<span class="text-primary"> Mahasiswa</span></div>
         </div>
 
         <nav class="flex-1 space-y-2">
