@@ -149,16 +149,11 @@ try {
         $staffCount = $staffRow ? (int)$staffRow['c'] : 0;
         $totalStaff += $staffCount;
 
-        // Try to find a Ketua (leader) for the divisi. First try exact match, then a flexible LIKE match.
+        // Find the Ketua Divisi (leader) for this divisi by exact jabatan name match
         $leader = db_fetch(
-            'SELECT a.* FROM anggota a JOIN anggota_jabatan aj ON aj.anggota_id = a.id LEFT JOIN jabatan j ON j.id = aj.jabatan_id WHERE aj.divisi_id = :id AND (j.nama = :jabatan OR j.nama LIKE :likejab) LIMIT 1',
-            ['id' => $divId, 'jabatan' => 'Ketua Divisi', 'likejab' => '%Ketua%Divisi%']
+            'SELECT a.* FROM anggota a JOIN anggota_jabatan aj ON aj.anggota_id = a.id JOIN jabatan j ON j.id = aj.jabatan_id WHERE aj.divisi_id = :id AND j.nama = :jabatan LIMIT 1',
+            ['id' => $divId, 'jabatan' => 'Ketua Divisi']
         );
-
-        if (!$leader) {
-            // Fallback: any anggota in this divisi
-            $leader = db_fetch('SELECT a.* FROM anggota a JOIN anggota_jabatan aj ON aj.anggota_id = a.id WHERE aj.divisi_id = :id LIMIT 1', ['id' => $divId]);
-        }
 
         $divisiStats[$divId] = [
             'staffCount' => $staffCount,
@@ -368,8 +363,14 @@ try {
                                 <div class="col-span-2 text-sm font-bold text-dark pl-2"><?= htmlspecialchars($stats['staffCount']) ?> Orang</div>
                                 <div class="col-span-2 flex items-center gap-2">
                                     <?php if ($leader): ?>
-                                        <?php $avatar = $leader['foto'] ? $leader['foto'] : 'https://ui-avatars.com/api/?name=' . urlencode($leader['nama']) . '&background=random'; ?>
-                                        <img src="<?= htmlspecialchars($avatar) ?>" class="w-8 h-8 rounded-full border border-white shadow-sm">
+                                        <?php 
+                                            $avatar = 'https://ui-avatars.com/api/?name=' . urlencode($leader['nama']) . '&background=random';
+                                            if (!empty($leader['foto'])) {
+                                                // Convert src/files/<filename> to ../files/<filename> for this directory level
+                                                $avatar = '../files/' . basename($leader['foto']);
+                                            }
+                                        ?>
+                                        <img src="<?= htmlspecialchars($avatar) ?>" class="w-8 h-8 rounded-full border border-white shadow-sm object-cover" onerror="this.src='https://ui-avatars.com/api/?name=<?php echo urlencode($leader['nama']); ?>&background=random'">
                                         <span class="text-xs font-bold text-dark"><?= htmlspecialchars($leader['nama']) ?></span>
                                     <?php else: ?>
                                         <img src="https://ui-avatars.com/api/?name=—&background=random" class="w-8 h-8 rounded-full border border-white shadow-sm">

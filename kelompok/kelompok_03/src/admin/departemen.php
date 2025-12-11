@@ -293,7 +293,7 @@ try {
                                     $staffCount = isset($c['c']) ? (int)$c['c'] : 0;
                                     $d = db_fetch('SELECT COUNT(*) as c FROM divisi WHERE departemen_id = :d', [':d' => $id]);
                                     $divisiCount = isset($d['c']) ? (int)$d['c'] : 0;
-                                    // try to get the Ketua Departemen by matching jabatan.nama = 'Ketua Departemen'
+                                    // Get the Ketua Departemen by exact match on jabatan.nama = 'Ketua Departemen'
                                     $kep = db_fetch(
                                         'SELECT a.* FROM anggota a 
                                          JOIN anggota_jabatan aj ON aj.anggota_id = a.id 
@@ -301,10 +301,6 @@ try {
                                          WHERE aj.departemen_id = :d AND j.nama = :jabatan LIMIT 1',
                                         [':d' => $id, ':jabatan' => 'Ketua Departemen']
                                     );
-                                    // Fallback: any anggota in this departemen
-                                    if (!$kep) {
-                                        $kep = db_fetch('SELECT a.* FROM anggota a JOIN anggota_jabatan aj ON aj.anggota_id = a.id WHERE aj.departemen_id = :d LIMIT 1', [':d' => $id]);
-                                    }
                                     if ($kep) $kepala = $kep;
                                 } catch (Exception $ex) {
                                     // ignore per-row error and continue
@@ -326,7 +322,14 @@ try {
                                 </div>
                                 <div class="col-span-3 flex items-center gap-2">
                                     <?php if ($kepala): ?>
-                                        <img src="<?php echo e($kepala['foto'] ?: 'https://ui-avatars.com/api/?name=' . urlencode($kepala['nama'])); ?>" class="w-8 h-8 rounded-full border border-white shadow-sm">
+                                        <?php 
+                                            $foto_src = 'https://ui-avatars.com/api/?name=' . urlencode($kepala['nama']);
+                                            if (!empty($kepala['foto'])) {
+                                                // Convert src/files/<filename> to ../files/<filename> for this directory level
+                                                $foto_src = '../files/' . basename($kepala['foto']);
+                                            }
+                                        ?>
+                                        <img src="<?php echo e($foto_src); ?>" class="w-8 h-8 rounded-full border border-white shadow-sm object-cover" onerror="this.src='https://ui-avatars.com/api/?name=<?php echo urlencode($kepala['nama']); ?>'">
                                         <span class="text-sm font-bold text-dark"><?php echo e($kepala['nama']); ?></span>
                                     <?php else: ?>
                                         <div class="w-8 h-8 rounded-full bg-gray-100"></div>
