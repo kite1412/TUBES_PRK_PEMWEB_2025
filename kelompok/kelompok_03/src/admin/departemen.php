@@ -89,10 +89,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'ID departemen tidak valid.';
         } else {
             try {
-                // delete departemen (consider cascade in DB if needed)
-                db_execute('DELETE FROM departemen WHERE id = :id', ['id' => $id]);
-                header('Location: departemen.php');
-                exit;
+                // Check if departemen has divisi
+                $divisiCheck = db_fetch('SELECT COUNT(*) as c FROM divisi WHERE departemen_id = :id', ['id' => $id]);
+                $divisiCount = isset($divisiCheck['c']) ? (int)$divisiCheck['c'] : 0;
+                
+                if ($divisiCount > 0) {
+                    $error = 'Tidak dapat menghapus departemen yang masih memiliki divisi. Hapus semua divisi terlebih dahulu.';
+                } else {
+                    // delete departemen
+                    db_execute('DELETE FROM departemen WHERE id = :id', ['id' => $id]);
+                    header('Location: departemen.php');
+                    exit;
+                }
             } catch (Exception $ex) {
                 $error = 'Gagal menghapus departemen: ' . $ex->getMessage();
             }
