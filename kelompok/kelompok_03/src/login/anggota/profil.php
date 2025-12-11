@@ -17,6 +17,46 @@ $user_id = $_SESSION['user_id'];
 // Date helper (format dates in Bahasa Indonesia)
 require_once __DIR__ . '/../../helpers/date_helper.php';
 
+// Helper: resolve file server path and appropriate URL to embed in <img>
+function file_url_and_path(?string $filename) {
+  $filename = (string)$filename;
+  $filename = trim($filename);
+  if ($filename === '') return ['path' => null, 'url' => null];
+
+  // Normalize: remove leading ./, ../, slashes and common prefixes like 'src/files/', 'files/', or 'uploads/'
+  $name = preg_replace('#^(?:\\.|\\.\\.|[\\/]+)+#', '', $filename);
+  $name = preg_replace('#^(?:src[\\/])?(?:files[\\/]|uploads[\\/])#i', '', $name);
+  $name = ltrim($name, '/\\');
+
+  $candidates = [
+    __DIR__ . '/../uploads/' . $name,
+    __DIR__ . '/../../files/' . $name,
+    __DIR__ . '/../files/' . $name,
+  ];
+
+  foreach ($candidates as $path) {
+    if (file_exists($path)) {
+      // normalize slashes for comparisons
+      $pNorm = str_replace('\\', '/', $path);
+      $dirNorm = str_replace('\\', '/', __DIR__);
+
+      if (strpos($pNorm, $dirNorm . '/../uploads/') === 0) {
+        return ['path' => $path, 'url' => '../uploads/' . $name];
+      }
+      if (strpos($pNorm, $dirNorm . '/../../files/') === 0) {
+        return ['path' => $path, 'url' => '../../files/' . $name];
+      }
+      if (strpos($pNorm, $dirNorm . '/../files/') === 0) {
+        return ['path' => $path, 'url' => '../files/' . $name];
+      }
+
+      // fallback: use plain name
+      return ['path' => $path, 'url' => $name];
+    }
+  }
+  return ['path' => null, 'url' => null];
+}
+
 // Logout is handled centrally via ../logout.php
 
 // === HANDLE EDIT PROFIL + UPLOAD FOTO ===
@@ -290,7 +330,8 @@ $pengumuman_list = $pengumuman_stmt->fetchAll(PDO::FETCH_ASSOC);
                     // resolve avatar path if available
                     $avatar = '';
                     if (!empty($user['foto'])) {
-                        $avatar = '../uploads/' . $user['foto'];
+                        $fotoPath = file_url_and_path($user['foto']);
+                        $avatar = $fotoPath['url'] ? $fotoPath['url'] : 'https://ui-avatars.com/api/?name=' . urlencode($user['nama']) . '&background=0466c8&color=fff';
                     } else {
                         $avatar = 'https://ui-avatars.com/api/?name=' . urlencode($user['nama']) . '&background=0466c8&color=fff';
                     }

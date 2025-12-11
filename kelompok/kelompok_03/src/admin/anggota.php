@@ -25,7 +25,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $departemen_id = trim((string)($_POST['departemen_id'] ?? ''));
         $divisi_id = trim((string)($_POST['divisi_id'] ?? ''));
 
-        if ($nama === '' || $npm === '' || $username === '' || (!$isUpdate && $password === '')) {
+        // If updating and no new foto file uploaded, preserve existing foto from database
+        if ($isUpdate && empty($_FILES['foto_file']['name']) && empty($foto)) {
+            $old_data = db_fetch('SELECT foto FROM anggota WHERE id = ?', [$anggota_id]);
+            if ($old_data && !empty($old_data['foto'])) {
+                $foto = $old_data['foto'];
+            }
+        }
+
+        // Handle foto file upload
+        if (!empty($_FILES['foto_file']['name'])) {
+            $allowed_ext = ['jpg', 'jpeg', 'png'];
+            $file_ext = strtolower(pathinfo($_FILES['foto_file']['name'], PATHINFO_EXTENSION));
+            $file_size = $_FILES['foto_file']['size'];
+
+            if (!in_array($file_ext, $allowed_ext)) {
+                $error = "Hanya file JPG/PNG yang diizinkan.";
+            } elseif ($file_size > 2 * 1024 * 1024) {
+                $error = "Ukuran file maksimal 2 MB.";
+            } else {
+                $filesDir = __DIR__ . '/../files';
+                if (!is_dir($filesDir)) {
+                    @mkdir($filesDir, 0755, true);
+                }
+
+                $foto_name = 'anggota_' . ($isUpdate ? $anggota_id : 'new') . '_' . time() . '.' . $file_ext;
+                $upload_path = $filesDir . '/' . $foto_name;
+
+                if (move_uploaded_file($_FILES['foto_file']['tmp_name'], $upload_path)) {
+                    $foto = 'src/files/' . $foto_name;
+
+                    // Delete old foto if updating
+                    if ($isUpdate) {
+                        $old_data = db_fetch('SELECT foto FROM anggota WHERE id = ?', [$anggota_id]);
+                        if ($old_data && !empty($old_data['foto'])) {
+                            $old_foto_filename = basename($old_data['foto']);
+                            $old_path = $filesDir . '/' . $old_foto_filename;
+                            if (file_exists($old_path)) {
+                                @unlink($old_path);
+                            }
+                        }
+                    }
+                } else {
+                    $error = "Gagal menyimpan foto. Pastikan folder /files bisa ditulis.";
+                }
+            }
+        }
+
+        if (!empty($error)) {
+            // Error already set
+        } elseif ($nama === '' || $npm === '' || $username === '' || (!$isUpdate && $password === '')) {
             $error = 'Nama, NPM, username, dan password wajib diisi.';
         } else {
             try {
@@ -47,17 +96,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $setSql = 'nama = :nama, npm = :npm, username = :username, password = :password, foto = :foto, updated_at = :updated_at';
                     }
                     db_execute("UPDATE anggota SET $setSql WHERE id = :id", $params);
-                    // update anggota_jabatan: remove old links and add new one if provided
-                    db_execute('DELETE FROM anggota_jabatan WHERE anggota_id = :id', ['id' => $anggota_id]);
+                    
+                    // Only update anggota_jabatan if departemen or divisi was explicitly changed
+                    // If both are empty strings, preserve existing jabatan assignments
                     $depVal = $departemen_id !== '' ? (int)$departemen_id : null;
                     $divVal = $divisi_id !== '' ? (int)$divisi_id : null;
-                    if ($depVal || $divVal) {
-                        db_execute('INSERT INTO anggota_jabatan (anggota_id, jabatan_id, departemen_id, divisi_id) VALUES (:anggota_id, NULL, :departemen_id, :divisi_id)', [
-                            'anggota_id' => $anggota_id,
-                            'departemen_id' => $depVal,
-                            'divisi_id' => $divVal,
-                        ]);
+                    
+                    // Only modify jabatan if user provided departemen or divisi values
+                    if ($departemen_id !== '' || $divisi_id !== '') {
+                        // User is explicitly updating departemen/divisi, so update jabatan
+                        db_execute('DELETE FROM anggota_jabatan WHERE anggota_id = :id', ['id' => $anggota_id]);
+                        if ($depVal || $divVal) {
+                            db_execute('INSERT INTO anggota_jabatan (anggota_id, jabatan_id, departemen_id, divisi_id) VALUES (:anggota_id, NULL, :departemen_id, :divisi_id)', [
+                                'anggota_id' => $anggota_id,
+                                'departemen_id' => $depVal,
+                                'divisi_id' => $divVal,
+                            ]);
+                        }
                     }
+                    // If neither departemen nor divisi was changed, preserve existing jabatan assignments
                 } else {
                     // create
                     // store plain-text password as requested
@@ -108,6 +165,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Gagal menghapus anggota: ' . $ex->getMessage();
             }
         }
+    } elseif ($action === 'remove_jabatan') {
+        $anggota_jabatan_id = (int)($_POST['anggota_jabatan_id'] ?? 0);
+        
+        if ($anggota_jabatan_id <= 0) {
+            $error = 'ID anggota_jabatan tidak valid.';
+        } else {
+            try {
+                // Get the jabatan_id to check if it has 'Organisasi' suffix
+                $ajRow = db_fetch('SELECT aj.jabatan_id FROM anggota_jabatan aj WHERE aj.id = :id', ['id' => $anggota_jabatan_id]);
+                
+                if ($ajRow && !empty($ajRow['jabatan_id'])) {
+                    $jabRow = db_fetch('SELECT nama FROM jabatan WHERE id = :id', ['id' => $ajRow['jabatan_id']]);
+                    
+                    if ($jabRow && !empty($jabRow['nama']) && strpos($jabRow['nama'], 'Organisasi') !== false) {
+                        // Delete the anggota_jabatan entry
+                        db_execute('DELETE FROM anggota_jabatan WHERE id = :id', ['id' => $anggota_jabatan_id]);
+                        header('Location: anggota.php');
+                        exit;
+                    } else {
+                        $error = 'Hanya jabatan dengan suffix "Organisasi" yang bisa dihapus.';
+                    }
+                } else {
+                    $error = 'Data anggota_jabatan tidak ditemukan.';
+                }
+            } catch (Exception $ex) {
+                $error = 'Gagal menghapus jabatan: ' . $ex->getMessage();
+            }
+        }
+    } elseif ($action === 'assign_jabatan') {
+        $anggota_id = (int)($_POST['anggota_id'] ?? 0);
+        $jabatan_id = (int)($_POST['jabatan_id'] ?? 0);
+        
+        if ($anggota_id <= 0 || $jabatan_id <= 0) {
+            $error = 'ID anggota atau jabatan tidak valid.';
+        } else {
+            try {
+                // Delete this jabatan from any other anggota (jabatan is exclusive to one anggota)
+                db_execute('DELETE FROM anggota_jabatan WHERE jabatan_id = :jabatan_id', ['jabatan_id' => $jabatan_id]);
+                
+                // Delete old jabatan assignments for this anggota
+                db_execute('DELETE FROM anggota_jabatan WHERE anggota_id = :anggota_id', ['anggota_id' => $anggota_id]);
+                
+                // Insert new jabatan assignment
+                db_execute(
+                    'INSERT INTO anggota_jabatan (anggota_id, jabatan_id, departemen_id, divisi_id) VALUES (:anggota_id, :jabatan_id, NULL, NULL)',
+                    ['anggota_id' => $anggota_id, 'jabatan_id' => $jabatan_id]
+                );
+                header('Location: anggota.php');
+                exit;
+            } catch (Exception $ex) {
+                $error = 'Gagal mengassign jabatan: ' . $ex->getMessage();
+            }
+        }
     }
 }
 try {
@@ -127,6 +237,9 @@ try {
     	// fetch departemen and divisi lists for modal selects
     	$departemen_list = db_fetch_all('SELECT id, nama FROM departemen ORDER BY nama ASC');
     	$divisi_list = db_fetch_all('SELECT id, departemen_id, nama FROM divisi ORDER BY nama ASC');
+    	
+    	// fetch jabatan list for assignment modal - filter for 'Organisasi' suffix only
+    	$jabatan_list = db_fetch_all("SELECT id, nama FROM jabatan WHERE nama LIKE '%Organisasi' ORDER BY nama ASC");
 } catch (Exception $ex) {
     $error = $ex->getMessage();
     $total = 0;
@@ -134,6 +247,7 @@ try {
     $total_departemen = 0;
     	$departemen_list = [];
     	$divisi_list = [];
+    	$jabatan_list = [];
 }
 ?>
 <!DOCTYPE html>
@@ -302,11 +416,11 @@ try {
 
             <div class="w-full">
                 <div class="grid grid-cols-12 gap-4 px-6 mb-2 text-xs font-bold text-muted uppercase tracking-wider">
-                    <div class="col-span-4">Profil Anggota</div>
+                    <div class="col-span-3">Profil Anggota</div>
                     <div class="col-span-2">NPM</div>
                     <div class="col-span-3">Departemen / Divisi</div>
                     <div class="col-span-2">Jabatan</div>
-                    <div class="col-span-1 text-right">Aksi</div>
+                    <div class="col-span-2 text-right">Aksi</div>
                 </div>
 
                 <div class="space-y-4">
@@ -321,27 +435,32 @@ try {
                             $npm = $anggota['npm'] ?? '';
                             $foto = $anggota['foto'] ?? '';
                             $jabatan = $anggota['jabatan'] ?? ''; // optional column
-                            $avatar = $foto ? e($foto) : 'https://ui-avatars.com/api/?name=' . urlencode($nama) . '&background=random';
+                            // Use stored foto path if available, otherwise generate avatar from name
+                            $avatar = !empty($foto) ? '../files/' . basename(e($foto)) : 'https://ui-avatars.com/api/?name=' . urlencode($nama) . '&background=random';
                         ?>
                         <?php
-                            // load latest link for this anggota (departemen/divisi) and fetch their names
+                            // load latest link for this anggota (departemen/divisi/jabatan) and fetch their names
                             $link = db_fetch(
-                                'SELECT aj.departemen_id, aj.divisi_id, dep.nama AS departemen_nama, dv.nama AS divisi_nama
+                                'SELECT aj.id AS anggota_jabatan_id, aj.departemen_id, aj.divisi_id, aj.jabatan_id, dep.nama AS departemen_nama, dv.nama AS divisi_nama, jab.nama AS jabatan_nama
                                  FROM anggota_jabatan aj
                                  LEFT JOIN departemen dep ON aj.departemen_id = dep.id
                                  LEFT JOIN divisi dv ON aj.divisi_id = dv.id
+                                 LEFT JOIN jabatan jab ON aj.jabatan_id = jab.id
                                  WHERE aj.anggota_id = :id
                                  ORDER BY aj.id DESC LIMIT 1',
                                 ['id' => $anggota['id']]
                             );
+                            $link_aj_id = $link ? ($link['anggota_jabatan_id'] ?? '') : '';
                             $link_dep = $link ? ($link['departemen_id'] ?? '') : '';
                             $link_div = $link ? ($link['divisi_id'] ?? '') : '';
+                            $link_jabatan_id = $link ? ($link['jabatan_id'] ?? '') : '';
                             $link_dep_name = $link ? ($link['departemen_nama'] ?? '') : '';
                             $link_div_name = $link ? ($link['divisi_nama'] ?? '') : '';
+                            $link_jabatan_name = $link ? ($link['jabatan_nama'] ?? '') : '';
                         ?>
                             <div class="group bg-white rounded-[20px] p-4 grid grid-cols-12 gap-4 items-center shadow-card hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-primary/20" 
-                                data-id="<?= e($anggota['id']) ?>" data-nama="<?= e($nama) ?>" data-npm="<?= e($npm) ?>" data-username="<?= e($username) ?>" data-foto="<?= e($foto) ?>" data-password="<?= e($anggota['password'] ?? '') ?>" data-departemen="<?= e($link_dep) ?>" data-divisi="<?= e($link_div) ?>">
-                            <div class="col-span-4 flex items-center gap-4">
+                                data-id="<?= e($anggota['id']) ?>" data-nama="<?= e($nama) ?>" data-npm="<?= e($npm) ?>" data-username="<?= e($username) ?>" data-foto="<?= e($foto) ?>" data-password="<?= e($anggota['password'] ?? '') ?>" data-departemen="<?= e($link_dep) ?>" data-divisi="<?= e($link_div) ?>" data-jabatan="<?= e($link_jabatan_id) ?>" data-jabatan-name="<?= e($link_jabatan_name) ?>" data-anggota-jabatan-id="<?= e($link_aj_id) ?>">
+                            <div class="col-span-3 flex items-center gap-4">
                                 <img src="<?php echo $avatar; ?>" class="w-12 h-12 rounded-full object-cover" onerror="this.src='https://ui-avatars.com/api/?name=' + encodeURIComponent('<?php echo e($nama); ?>')">
                                 <div>
                                     <h3 class="font-bold text-dark text-sm group-hover:text-primary transition"><?php echo e($nama); ?></h3>
@@ -352,10 +471,13 @@ try {
                             <div class="col-span-3 text-sm text-dark font-medium"><?php echo e($link_dep_name ?: '-'); ?> <span class="text-muted text-xs"><?php echo $link_div_name ? '• ' . e($link_div_name) : ''; ?></span></div>
                             <div class="col-span-2">
                                 <span class="bg-blue-50 text-primary px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1">
-                                    <?php echo e($jabatan ?: 'Anggota'); ?>
+                                    <?php echo e($link_jabatan_name ?: 'Anggota'); ?>
                                 </span>
                             </div>
-                            <div class="col-span-1 text-right flex justify-end items-center gap-2">
+                            <div class="col-span-2 text-right flex justify-end items-center gap-2">
+                                <button type="button" onclick="openAssignJabatanModal(this)" class="text-sm px-3 py-1 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100" title="Assign Jabatan">
+                                    Jabatan
+                                </button>
                                 <button type="button" onclick="openEditModalFromRow(this)" class="text-sm px-3 py-1 rounded-lg bg-blue-50 text-primary hover:bg-blue-100">Edit</button>
                                 <button type="button" onclick='confirmDeleteAnggota(<?= e($anggota['id']) ?>, <?= json_encode($nama) ?>)' class="text-sm px-3 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100">Hapus</button>
                             </div>
@@ -383,9 +505,10 @@ try {
                 <div class="mb-4 p-3 bg-red-50 text-red-700 rounded"><?= e($error) ?></div>
             <?php endif; ?>
 
-            <form method="post" id="formTambahAnggota" class="space-y-4">
+            <form method="post" id="formTambahAnggota" enctype="multipart/form-data" class="space-y-4">
                 <input type="hidden" name="action" value="create_anggota">
                 <input type="hidden" name="anggota_id" id="anggotaIdInput" value="">
+                <input type="hidden" id="fotoHidden" name="foto" value="">
                 <div>
                     <label class="block text-xs font-bold text-dark uppercase mb-1">Nama</label>
                     <input name="nama" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" placeholder="Nama lengkap">
@@ -407,8 +530,18 @@ try {
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-dark uppercase mb-1">Foto (URL)</label>
-                    <input name="foto" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" placeholder="https://...">
+                    <label class="block text-xs font-bold text-dark uppercase mb-1">Foto Profil</label>
+                    <div class="relative">
+                        <input type="file" name="foto_file" id="fotoFileInput" class="hidden" accept="image/jpeg,image/png,image/jpg">
+                        <div id="fotoPreviewContainer" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition flex items-center gap-3 bg-gray-50 cursor-pointer hover:bg-gray-100">
+                            <img id="fotoPreview" src="" class="w-12 h-12 rounded-lg object-cover hidden">
+                            <div id="fotoPlaceholder" class="flex-1">
+                                <p class="text-dark font-medium">Pilih foto...</p>
+                                <p class="text-xs text-muted">JPG, PNG (Max 2MB)</p>
+                            </div>
+                            <i class="fa-solid fa-cloud-arrow-up text-xl text-muted"></i>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-4">
@@ -440,9 +573,47 @@ try {
         </div>
     </div>
 
+    <!-- Assign Jabatan Modal -->
+    <div id="modalAssignJabatan" class="fixed inset-0 z-50 flex items-center justify-center bg-dark/60 backdrop-blur-sm hide-modal modal">
+        <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 modal-content relative">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-dark">Assign Jabatan</h2>
+                <button onclick="closeAssignJabatanModal()" class="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-muted hover:bg-red-50 hover:text-red-500 transition"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <form method="post" id="formAssignJabatan" class="space-y-4">
+                <input type="hidden" name="action" value="assign_jabatan">
+                <input type="hidden" name="anggota_id" id="assignAnggotaId" value="">
+                <input type="hidden" id="assignAnggotaJabatanId" value="">
+                
+                <div>
+                    <p class="text-sm font-medium text-dark mb-3">Pilih Jabatan untuk:</p>
+                    <p id="assignAnggotaNama" class="text-lg font-bold text-primary mb-4"></p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-dark uppercase mb-1">Jabatan</label>
+                    <select name="jabatan_id" id="selectAssignJabatan" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition">
+                        <option value="">-- Pilih Jabatan --</option>
+                        <?php foreach ($jabatan_list as $jab): ?>
+                            <option value="<?= e($jab['id']) ?>"><?= e($jab['nama']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="pt-2 flex gap-3">
+                    <button type="submit" class="flex-1 bg-primary hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/30 transition transform active:scale-95">Simpan</button>
+                    <button type="button" id="deleteJabatanBtn" style="display: none;" class="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition">Hapus Jabatan</button>
+                    <button type="button" onclick="closeAssignJabatanModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-dark font-bold py-3 rounded-xl transition">Batal</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         (function(){
             const modal = document.getElementById('modalTambahAnggota');
+            const form = document.getElementById('formTambahAnggota');
             let escHandler = null;
 
             function openModal() {
@@ -478,6 +649,14 @@ try {
             function overlayClick(e) {
                 // if click target is the overlay (modal itself), close
                 if (e.target === modal) closeModal();
+            }
+
+            // Prevent form submission if file input is being clicked
+            if (form) {
+                form.addEventListener('submit', function(e) {
+                    // Allow form submission - file input will be included automatically
+                    // because form has enctype="multipart/form-data"
+                }, false);
             }
 
             // expose toggle function used by buttons
@@ -542,6 +721,15 @@ try {
             document.getElementById('anggotaIdInput').value = '';
             const submitBtn = document.getElementById('submitAnggotaBtn');
             if (submitBtn) submitBtn.textContent = 'Simpan Anggota';
+            
+            // reset foto preview
+            const fotoFileInput = document.getElementById('fotoFileInput');
+            const fotoPreview = document.getElementById('fotoPreview');
+            const fotoPlaceholder = document.getElementById('fotoPlaceholder');
+            if (fotoFileInput) fotoFileInput.value = '';
+            fotoPreview.classList.add('hidden');
+            fotoPlaceholder.classList.remove('hidden');
+            
             // apply divisi filter after reset
             const evt = new Event('change');
             const dep = document.getElementById('selectDepartemen');
@@ -570,11 +758,30 @@ try {
             form.querySelector('input[name="nama"]').value = nama;
             form.querySelector('input[name="npm"]').value = npm;
             form.querySelector('input[name="username"]').value = username;
-            form.querySelector('input[name="foto"]').value = foto;
             // populate password field from row data (plain-text stored)
             const pwd = row.getAttribute('data-password') || '';
             const pwdInput = form.querySelector('input[name="password"]');
             if (pwdInput) pwdInput.value = pwd;
+            
+            // reset file input and show preview if foto exists
+            const fotoFileInput = document.getElementById('fotoFileInput');
+            const fotoPreview = document.getElementById('fotoPreview');
+            const fotoPlaceholder = document.getElementById('fotoPlaceholder');
+            const fotoHidden = document.getElementById('fotoHidden');
+            
+            if (fotoFileInput) fotoFileInput.value = '';
+            fotoHidden.value = '';
+            
+            if (foto) {
+                // show existing foto preview from files directory
+                fotoPreview.src = '../files/' + foto.split('/').pop();
+                fotoPreview.classList.remove('hidden');
+                fotoPlaceholder.classList.add('hidden');
+            } else {
+                fotoPreview.classList.add('hidden');
+                fotoPlaceholder.classList.remove('hidden');
+            }
+            
             // set departemen and trigger divisi filter
             const depSelect = document.getElementById('selectDepartemen');
             const divSelect = document.getElementById('selectDivisi');
@@ -607,6 +814,62 @@ try {
             }
             document.getElementById('deleteAnggotaId').value = id;
             f.submit();
+        }
+
+        // confirm and remove jabatan (for Organisasi suffix only)
+        function confirmRemoveJabatan(ajId, jabatanName) {
+            if (!confirm('Hapus jabatan ' + jabatanName + '?')) return;
+            let f = document.getElementById('formRemoveJabatan');
+            if (!f) {
+                f = document.createElement('form');
+                f.method = 'POST';
+                f.style.display = 'none';
+                f.id = 'formRemoveJabatan';
+                const a = document.createElement('input'); a.name = 'action'; a.value = 'remove_jabatan'; f.appendChild(a);
+                const b = document.createElement('input'); b.name = 'anggota_jabatan_id'; b.id = 'removeJabatanId'; f.appendChild(b);
+                document.body.appendChild(f);
+            }
+            document.getElementById('removeJabatanId').value = ajId;
+            f.submit();
+        }
+
+        // Assign Jabatan Modal Functions
+        function openAssignJabatanModal(btn) {
+            const row = btn.closest('[data-id]');
+            if (!row) return;
+            const id = row.getAttribute('data-id');
+            const nama = row.getAttribute('data-nama') || '';
+            const jabatan = row.getAttribute('data-jabatan') || '';
+            const jabatanName = row.getAttribute('data-jabatan-name') || '';
+            const ajId = row.getAttribute('data-anggota-jabatan-id') || '';
+
+            document.getElementById('assignAnggotaId').value = id;
+            document.getElementById('assignAnggotaNama').textContent = nama;
+            document.getElementById('assignAnggotaJabatanId').value = ajId;
+            
+            const selectJabatan = document.getElementById('selectAssignJabatan');
+            if (selectJabatan) selectJabatan.value = jabatan;
+
+            // Show delete button only if jabatan has 'Organisasi' suffix and ajId exists
+            const deleteBtn = document.getElementById('deleteJabatanBtn');
+            if (deleteBtn) {
+                deleteBtn.style.display = (jabatanName.includes('Organisasi') && ajId) ? 'inline-block' : 'none';
+                deleteBtn.onclick = () => confirmRemoveJabatan(ajId, jabatanName);
+            }
+
+            const modal = document.getElementById('modalAssignJabatan');
+            if (modal) {
+                modal.classList.remove('hide-modal');
+                modal.classList.add('show-modal');
+            }
+        }
+
+        function closeAssignJabatanModal() {
+            const modal = document.getElementById('modalAssignJabatan');
+            if (modal) {
+                modal.classList.remove('show-modal');
+                modal.classList.add('hide-modal');
+            }
         }
     </script>
     <script>
@@ -705,5 +968,72 @@ try {
         })();
     </script>
 
+    <script>
+        // file preview handler for foto input
+        (function(){
+            const fotoFileInput = document.getElementById('fotoFileInput');
+            const fotoPreview = document.getElementById('fotoPreview');
+            const fotoPlaceholder = document.getElementById('fotoPlaceholder');
+            const fotoContainer = document.getElementById('fotoPreviewContainer');
+
+            if (!fotoFileInput || !fotoContainer) return;
+
+            // Make container clickable - open file picker
+            fotoContainer.addEventListener('click', function(e){
+                e.preventDefault();
+                e.stopPropagation();
+                fotoFileInput.click();
+            }, false);
+
+            // Handle file selection - validate and show preview
+            fotoFileInput.addEventListener('change', function(e){
+                e.stopPropagation();
+                const file = this.files && this.files[0];
+                if (!file) return;
+
+                // Validate file size
+                if (file.size > 2 * 1024 * 1024) {
+                    alert('Ukuran file maksimal 2 MB.');
+                    this.value = ''; // Reset input
+                    fotoPreview.classList.add('hidden');
+                    fotoPlaceholder.classList.remove('hidden');
+                    return;
+                }
+
+                // Validate file type
+                const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+                if (!allowedTypes.includes(file.type)) {
+                    alert('Hanya file JPG/PNG yang diizinkan.');
+                    this.value = ''; // Reset input
+                    fotoPreview.classList.add('hidden');
+                    fotoPlaceholder.classList.remove('hidden');
+                    return;
+                }
+
+                // Show preview using FileReader
+                const reader = new FileReader();
+                reader.onload = function(readerEvent) {
+                    fotoPreview.src = readerEvent.target.result;
+                    fotoPreview.classList.remove('hidden');
+                    fotoPlaceholder.classList.add('hidden');
+                };
+                reader.onerror = function() {
+                    alert('Gagal membaca file.');
+                    fotoFileInput.value = '';
+                    fotoPreview.classList.add('hidden');
+                    fotoPlaceholder.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }, false);
+
+            // Prevent drag-and-drop from causing issues
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                fotoContainer.addEventListener(eventName, function(e){
+                    e.preventDefault();
+                    e.stopPropagation();
+                }, false);
+            });
+        })();
+    </script>
 </body>
 </html>

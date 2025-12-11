@@ -10,9 +10,9 @@ function file_url_and_path(?string $filename) {
   $filename = trim($filename);
   if ($filename === '') return ['path' => null, 'url' => null];
 
-  // Normalize: remove leading ./, ../, slashes and common prefixes like 'files/' or 'uploads/'
+  // Normalize: remove leading ./, ../, slashes and common prefixes like 'src/files/', 'files/', or 'uploads/'
   $name = preg_replace('#^(?:\\.|\\.\\.|[\\/]+)+#', '', $filename);
-  $name = preg_replace('#^(?:files[\\/]|uploads[\\/])#i', '', $name);
+  $name = preg_replace('#^(?:src[\\/])?(?:files[\\/]|uploads[\\/])#i', '', $name);
   $name = ltrim($name, '/\\');
 
   $candidates = [
@@ -114,10 +114,11 @@ try {
     $stmt->execute();
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as $r) {
+        $fotoPath = file_url_and_path($r['foto'] ?? '');
         $struktur_inti[] = [
             'jabatan' => $r['jabatan_name'] ?? 'Anggota',
             'nama' => $r['nama'],
-            'foto' => !empty($r['foto']) ? ('uploads/' . $r['foto']) : null
+            'foto' => $fotoPath['url']
         ];
     }
 } catch (Exception $e) { $struktur_inti = []; }
@@ -164,10 +165,11 @@ try {
     if (isset($mapToKey[$jab])) {
       $key = $mapToKey[$jab];
       if ($struktur_org_roles[$key] === null) {
+        $fotoPath = file_url_and_path($r['foto'] ?? '');
         $struktur_org_roles[$key] = [
           'anggota_id' => (int)($r['anggota_id'] ?? 0),
           'nama' => $r['nama'] ?? '',
-          'foto' => !empty($r['foto']) ? ('uploads/' . $r['foto']) : null,
+          'foto' => $fotoPath['url'],
           'jabatan' => $jab
         ];
       }

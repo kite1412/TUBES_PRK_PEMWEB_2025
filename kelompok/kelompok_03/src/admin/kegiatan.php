@@ -17,14 +17,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $judul = trim((string)($_POST['judul'] ?? ''));
         $deskripsi = trim((string)($_POST['deskripsi'] ?? ''));
         $date = trim((string)($_POST['tanggal_date'] ?? ''));
-        $time = trim((string)($_POST['tanggal_time'] ?? ''));
+        $jam = trim((string)($_POST['tanggal_jam'] ?? ''));
+        $menit = trim((string)($_POST['tanggal_menit'] ?? ''));
 
         if ($judul === '' || $date === '') {
             $error = 'Judul dan tanggal wajib diisi.';
         } else {
-            try {
-                $dt = $date;
-                if ($time !== '') $dt .= ' ' . $time;
+            // Validate hour and minute if provided
+            if ($jam !== '') {
+                $jamInt = (int)$jam;
+                if ($jamInt < 0 || $jamInt > 23) {
+                    $error = 'Jam harus antara 0-23.';
+                }
+            }
+            if (!isset($error) && $menit !== '') {
+                $menitInt = (int)$menit;
+                if ($menitInt < 0 || $menitInt > 59) {
+                    $error = 'Menit harus antara 0-59.';
+                }
+            }
+            
+            if (!isset($error)) {
+                try {
+                    $dt = $date;
+                    // Construct time string from hour and minute inputs
+                    if ($jam !== '' || $menit !== '') {
+                        $hour = $jam !== '' ? str_pad((int)$jam, 2, '0', STR_PAD_LEFT) : '00';
+                        $minute = $menit !== '' ? str_pad((int)$menit, 2, '0', STR_PAD_LEFT) : '00';
+                        $dt .= ' ' . $hour . ':' . $minute;
+                    }
                 // normalize datetime
                 $dtObj = new DateTime($dt);
                 $dtStr = $dtObj->format('Y-m-d H:i:s');
@@ -46,10 +67,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'updated_at' => $now,
                     ]);
                 }
-                header('Location: kegiatan.php');
-                exit;
-            } catch (Exception $ex) {
-                $error = 'Gagal menyimpan kegiatan: ' . $ex->getMessage();
+                    header('Location: kegiatan.php');
+                    exit;
+                } catch (Exception $ex) {
+                    $error = 'Gagal menyimpan kegiatan: ' . $ex->getMessage();
+                }
             }
         }
     } elseif ($action === 'delete_kegiatan') {
@@ -281,9 +303,15 @@ try {
                                 <label class="block text-xs font-bold text-dark uppercase mb-1">Tanggal</label>
                                 <input type="date" id="inputTanggal" name="tanggal_date" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" required>
                             </div>
-                            <div>
-                                <label class="block text-xs font-bold text-dark uppercase mb-1">Jam Mulai</label>
-                                <input type="time" id="inputJam" name="tanggal_time" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition">
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-xs font-bold text-dark uppercase mb-1">Jam</label>
+                                    <input type="number" id="inputJam" name="tanggal_jam" min="0" max="23" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" placeholder="00" oninput="validateHour(this)">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-dark uppercase mb-1">Menit</label>
+                                    <input type="number" id="inputMenit" name="tanggal_menit" min="0" max="59" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition" placeholder="00" oninput="validateMinute(this)">
+                                </div>
                             </div>
                         </div>
 
@@ -302,6 +330,33 @@ try {
     </div>
 
     <script>
+        // Validation functions for hour and minute
+        function validateHour(input) {
+            let val = input.value;
+            if (val === '') return;
+            let num = parseInt(val, 10);
+            if (isNaN(num) || num < 0 || num > 23) {
+                input.style.borderColor = '#ef4444';
+                input.title = 'Jam harus antara 0-23';
+            } else {
+                input.style.borderColor = '';
+                input.title = '';
+            }
+        }
+
+        function validateMinute(input) {
+            let val = input.value;
+            if (val === '') return;
+            let num = parseInt(val, 10);
+            if (isNaN(num) || num < 0 || num > 59) {
+                input.style.borderColor = '#ef4444';
+                input.title = 'Menit harus antara 0-59';
+            } else {
+                input.style.borderColor = '';
+                input.title = '';
+            }
+        }
+
         // Modal Logic
         function toggleModal(show) {
             const modal = document.getElementById('modalKegiatan');
@@ -381,9 +436,10 @@ try {
             const deskripsi = item.getAttribute('data-deskripsi') || '';
             const tanggal = item.getAttribute('data-tanggal') || '';
 
-            // split tanggal into date and time
+            // split tanggal into date, hour, and minute
             let datePart = '';
-            let timePart = '';
+            let hourPart = '';
+            let minutePart = '';
             if (tanggal) {
                 const dt = new Date(tanggal);
                 if (!isNaN(dt)) {
@@ -392,9 +448,8 @@ try {
                     const mm = String(dt.getMonth()+1).padStart(2,'0');
                     const dd = String(dt.getDate()).padStart(2,'0');
                     datePart = yyyy + '-' + mm + '-' + dd;
-                    const hh = String(dt.getHours()).padStart(2,'0');
-                    const mi = String(dt.getMinutes()).padStart(2,'0');
-                    timePart = hh + ':' + mi;
+                    hourPart = String(dt.getHours()).padStart(2,'0');
+                    minutePart = String(dt.getMinutes()).padStart(2,'0');
                 }
             }
 
@@ -403,7 +458,8 @@ try {
             document.getElementById('inputJudul').value = judul;
             document.getElementById('inputDeskripsi').value = deskripsi;
             document.getElementById('inputTanggal').value = datePart;
-            document.getElementById('inputJam').value = timePart;
+            document.getElementById('inputJam').value = hourPart;
+            document.getElementById('inputMenit').value = minutePart;
             toggleModal(true);
         }
 
